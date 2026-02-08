@@ -1,8 +1,9 @@
 import { useState, useCallback } from "react";
-import { ArrowLeft, FileCode, Folder, FolderOpen, ChevronRight, ChevronDown, Upload, Trash2 } from "lucide-react";
+import { ArrowLeft, FileCode, Folder, FolderOpen, ChevronRight, ChevronDown, Upload, Trash2, Download, Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import Editor from "@monaco-editor/react";
-import { motion } from "framer-motion";
+import JSZip from "jszip";
+import { saveAs } from "file-saver";
 import { FolderUpload } from "@/components/FolderUpload";
 import { AIChat } from "@/components/AIChat";
 import { buildFileTree, type UploadedFile, type FileTreeNode } from "@/lib/fileUtils";
@@ -53,6 +54,7 @@ export function LocalEditorPage() {
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [selectedPath, setSelectedPath] = useState("");
   const [showUpload, setShowUpload] = useState(true);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   const fileTree = buildFileTree(files);
   const selectedFile = files.find(f => f.path === selectedPath);
@@ -91,6 +93,32 @@ export function LocalEditorPage() {
     setShowUpload(true);
   };
 
+  const downloadAsZip = useCallback(async () => {
+    if (files.length === 0) return;
+    
+    setIsDownloading(true);
+    try {
+      const zip = new JSZip();
+      
+      // Get the root folder name (first part of the first file's path)
+      const firstPath = files[0].path;
+      const rootFolder = firstPath.includes('/') ? firstPath.split('/')[0] : 'project';
+      
+      // Add all files to the zip
+      for (const file of files) {
+        zip.file(file.path, file.content);
+      }
+      
+      // Generate and download
+      const blob = await zip.generateAsync({ type: "blob" });
+      saveAs(blob, `${rootFolder}-edited.zip`);
+    } catch (error) {
+      console.error("Error creating zip:", error);
+    } finally {
+      setIsDownloading(false);
+    }
+  }, [files]);
+
   if (showUpload) {
     return (
       <div className="h-full flex items-center justify-center p-8">
@@ -119,13 +147,27 @@ export function LocalEditorPage() {
           <span className="text-xs font-semibold text-foreground truncate">
             {files.length} arquivos
           </span>
-          <button 
-            onClick={clearFiles}
-            className="text-muted-foreground hover:text-destructive transition-colors"
-            title="Limpar"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button 
+              onClick={downloadAsZip}
+              disabled={isDownloading}
+              className="text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"
+              title="Download como ZIP"
+            >
+              {isDownloading ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Download className="w-3.5 h-3.5" />
+              )}
+            </button>
+            <button 
+              onClick={clearFiles}
+              className="text-muted-foreground hover:text-destructive transition-colors"
+              title="Limpar"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
         <div className="flex-1 overflow-auto py-1">
           {fileTree.map((n) => (
