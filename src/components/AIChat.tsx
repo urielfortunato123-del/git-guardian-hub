@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from "react";
-import { Send, Bot, User, Loader2, Sparkles } from "lucide-react";
+import { Send, Bot, User, Loader2, Sparkles, ChevronDown } from "lucide-react";
 import ReactMarkdown from "react-markdown";
-import { supabase } from "@/integrations/supabase/client";
 import type { UploadedFile } from "@/lib/fileUtils";
 
 interface Message {
@@ -14,11 +13,26 @@ interface AIChatProps {
   onFileUpdate: (path: string, content: string) => void;
 }
 
+const AI_MODELS = [
+  { id: "openai/gpt-4o-mini", name: "GPT-4o Mini", provider: "OpenAI", icon: "🟢" },
+  { id: "openai/gpt-4o", name: "GPT-4o", provider: "OpenAI", icon: "🟢" },
+  { id: "openai/gpt-4-turbo", name: "GPT-4 Turbo", provider: "OpenAI", icon: "🟢" },
+  { id: "anthropic/claude-3.5-sonnet", name: "Claude 3.5 Sonnet", provider: "Anthropic", icon: "🟠" },
+  { id: "anthropic/claude-3-opus", name: "Claude 3 Opus", provider: "Anthropic", icon: "🟠" },
+  { id: "google/gemini-pro-1.5", name: "Gemini Pro 1.5", provider: "Google", icon: "🔵" },
+  { id: "google/gemini-flash-1.5", name: "Gemini Flash 1.5", provider: "Google", icon: "🔵" },
+  { id: "meta-llama/llama-3.1-70b-instruct", name: "Llama 3.1 70B", provider: "Meta", icon: "🟣" },
+  { id: "deepseek/deepseek-coder", name: "DeepSeek Coder", provider: "DeepSeek", icon: "⚫" },
+];
+
 export function AIChat({ files, onFileUpdate }: AIChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedModel, setSelectedModel] = useState(AI_MODELS[0]);
+  const [showModelPicker, setShowModelPicker] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const modelPickerRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -28,8 +42,18 @@ export function AIChat({ files, onFileUpdate }: AIChatProps) {
     scrollToBottom();
   }, [messages]);
 
+  // Close model picker when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (modelPickerRef.current && !modelPickerRef.current.contains(e.target as Node)) {
+        setShowModelPicker(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   const parseFileEdits = (content: string) => {
-    // Match code blocks with filepath: prefix
     const regex = /```filepath:([^\n]+)\n([\s\S]*?)```/g;
     let match;
     
@@ -48,7 +72,6 @@ export function AIChat({ files, onFileUpdate }: AIChatProps) {
     setInput("");
     setIsLoading(true);
 
-    // Build files object for the API
     const filesObj: Record<string, string> = {};
     files.forEach((f) => {
       filesObj[f.path] = f.content;
@@ -66,6 +89,7 @@ export function AIChat({ files, onFileUpdate }: AIChatProps) {
           body: JSON.stringify({
             messages: [...messages, userMessage],
             files: filesObj,
+            model: selectedModel.id,
           }),
         }
       );
@@ -79,7 +103,6 @@ export function AIChat({ files, onFileUpdate }: AIChatProps) {
         throw new Error("No response body");
       }
 
-      // Stream the response
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let assistantContent = "";
@@ -126,7 +149,6 @@ export function AIChat({ files, onFileUpdate }: AIChatProps) {
         }
       }
 
-      // Parse file edits from the response
       parseFileEdits(assistantContent);
 
     } catch (error) {
@@ -151,10 +173,54 @@ export function AIChat({ files, onFileUpdate }: AIChatProps) {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
-        <Sparkles className="w-5 h-5 text-primary" />
-        <span className="font-semibold text-foreground">AI Editor</span>
-        <span className="text-xs text-muted-foreground ml-2">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+        <div className="flex items-center gap-2">
+          <Sparkles className="w-5 h-5 text-primary" />
+          <span className="font-semibold text-foreground">AI Editor</span>
+        </div>
+        
+        {/* Model Selector */}
+        <div className="relative" ref={modelPickerRef}>
+          <button
+            onClick={() => setShowModelPicker(!showModelPicker)}
+            className="flex items-center gap-1.5 text-xs bg-secondary hover:bg-secondary/80 px-2.5 py-1.5 rounded-md transition-colors"
+          >
+            <span>{selectedModel.icon}</span>
+            <span className="text-foreground font-medium max-w-[100px] truncate">{selectedModel.name}</span>
+            <ChevronDown className="w-3 h-3 text-muted-foreground" />
+          </button>
+          
+          {showModelPicker && (
+            <div className="absolute right-0 top-full mt-1 w-56 bg-popover border border-border rounded-lg shadow-lg z-50 py-1 max-h-72 overflow-auto">
+              {AI_MODELS.map((model) => (
+                <button
+                  key={model.id}
+                  onClick={() => {
+                    setSelectedModel(model);
+                    setShowModelPicker(false);
+                  }}
+                  className={`w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-secondary/60 transition-colors ${
+                    selectedModel.id === model.id ? "bg-primary/10" : ""
+                  }`}
+                >
+                  <span className="text-sm">{model.icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate">{model.name}</p>
+                    <p className="text-xs text-muted-foreground">{model.provider}</p>
+                  </div>
+                  {selectedModel.id === model.id && (
+                    <span className="text-primary text-xs">✓</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* File count */}
+      <div className="px-4 py-1.5 border-b border-border bg-secondary/30">
+        <span className="text-xs text-muted-foreground">
           {files.length} arquivos carregados
         </span>
       </div>
@@ -233,7 +299,7 @@ export function AIChat({ files, onFileUpdate }: AIChatProps) {
               <Loader2 className="w-4 h-4 text-primary animate-spin" />
             </div>
             <div className="bg-card border border-border rounded-lg px-4 py-2">
-              <span className="text-sm text-muted-foreground">Pensando...</span>
+              <span className="text-sm text-muted-foreground">Pensando com {selectedModel.name}...</span>
             </div>
           </div>
         )}
