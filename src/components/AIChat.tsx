@@ -13,7 +13,20 @@ interface AIChatProps {
   onFileUpdate: (path: string, content: string) => void;
 }
 
-const AI_MODELS = [
+interface AIModel {
+  id: string;
+  name: string;
+  provider: string;
+  icon: string;
+  isLocal?: boolean;
+  baseUrl?: string;
+}
+
+const AI_MODELS: AIModel[] = [
+  // Local models
+  { id: "local/lm-studio", name: "LM Studio", provider: "Local", icon: "🖥️", isLocal: true, baseUrl: "http://localhost:1234/v1" },
+  { id: "local/ollama", name: "Ollama", provider: "Local", icon: "🦙", isLocal: true, baseUrl: "http://localhost:11434/v1" },
+  // Cloud models via OpenRouter
   { id: "openai/gpt-4o-mini", name: "GPT-4o Mini", provider: "OpenAI", icon: "🟢" },
   { id: "openai/gpt-4o", name: "GPT-4o", provider: "OpenAI", icon: "🟢" },
   { id: "openai/gpt-4-turbo", name: "GPT-4 Turbo", provider: "OpenAI", icon: "🟢" },
@@ -64,6 +77,37 @@ export function AIChat({ files, onFileUpdate }: AIChatProps) {
     }
   };
 
+  const buildSystemPrompt = (filesObj: Record<string, string>) => {
+    let systemPrompt = `You are an expert AI coding assistant. You help users edit their code files.
+
+CAPABILITIES:
+- You can VIEW all files the user has uploaded
+- You can EDIT files by providing updated code
+- You understand multiple programming languages
+
+INSTRUCTIONS:
+- When the user asks to modify a file, show the COMPLETE updated file content
+- Use markdown code blocks with the file path as the language identifier
+- Be concise but thorough in your explanations
+
+FORMAT FOR FILE EDITS:
+When editing a file, use this format:
+\`\`\`filepath:src/example.ts
+// complete file content here
+\`\`\`
+
+CURRENT PROJECT FILES:`;
+
+    if (Object.keys(filesObj).length > 0) {
+      for (const [path, content] of Object.entries(filesObj)) {
+        systemPrompt += `\n\n--- ${path} ---\n${content.slice(0, 3000)}${content.length > 3000 ? "\n... (truncated)" : ""}`;
+      }
+    } else {
+      systemPrompt += "\n\n(No files uploaded yet)";
+    }
+    return systemPrompt;
+  };
+
   const sendMessage = async () => {
     if (!input.trim() || isLoading) return;
 
@@ -78,21 +122,43 @@ export function AIChat({ files, onFileUpdate }: AIChatProps) {
     });
 
     try {
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`,
-        {
+      let response: Response;
+
+      if (selectedModel.isLocal && selectedModel.baseUrl) {
+        // Direct call to local model (LM Studio, Ollama)
+        response = await fetch(`${selectedModel.baseUrl}/chat/completions`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
           },
           body: JSON.stringify({
-            messages: [...messages, userMessage],
-            files: filesObj,
-            model: selectedModel.id,
+            model: "local-model",
+            messages: [
+              { role: "system", content: buildSystemPrompt(filesObj) },
+              ...messages.map(m => ({ role: m.role, content: m.content })),
+              { role: "user", content: input },
+            ],
+            stream: true,
           }),
-        }
-      );
+        });
+      } else {
+        // Cloud model via edge function
+        response = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            },
+            body: JSON.stringify({
+              messages: [...messages, userMessage],
+              files: filesObj,
+              model: selectedModel.id,
+            }),
+          }
+        );
+      }
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -205,7 +271,12 @@ export function AIChat({ files, onFileUpdate }: AIChatProps) {
                 >
                   <span className="text-sm">{model.icon}</span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground truncate">{model.name}</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-sm font-medium text-foreground truncate">{model.name}</p>
+                      {model.isLocal && (
+                        <span className="text-[10px] px-1.5 py-0.5 bg-accent text-accent-foreground rounded">LOCAL</span>
+                      )}
+                    </div>
                     <p className="text-xs text-muted-foreground">{model.provider}</p>
                   </div>
                   {selectedModel.id === model.id && (
