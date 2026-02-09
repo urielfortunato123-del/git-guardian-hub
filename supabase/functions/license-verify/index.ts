@@ -2,9 +2,15 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
+
+const json = (data: unknown, status = 200) =>
+  new Response(JSON.stringify(data), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -17,13 +23,10 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const { action, license_key, hardware_id } = await req.json();
+    const { action, license_key, hardware_id, email } = await req.json();
 
     if (!license_key) {
-      return new Response(JSON.stringify({ valid: false, error: "Missing license_key" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return json({ valid: false, error: "Chave de licença obrigatória" }, 400);
     }
 
     // Lookup license
@@ -34,33 +37,40 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     if (lookupErr || !license) {
-      return new Response(JSON.stringify({ valid: false, error: "Invalid license key" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return json({ valid: false, error: "Chave de licença inválida" }, 403);
     }
 
     if (!license.is_active) {
-      return new Response(JSON.stringify({ valid: false, error: "License revoked" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return json({ valid: false, error: "Licença revogada" }, 403);
     }
 
     if (license.expires_at && new Date(license.expires_at) < new Date()) {
-      return new Response(JSON.stringify({ valid: false, error: "License expired" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return json({ valid: false, error: "Licença expirada" }, 403);
+    }
+
+    // ── EMAIL VERIFICATION ──
+    // If the license has an email set, the provided email must match
+    if (license.user_email && email) {
+      if (license.user_email.toLowerCase().trim() !== email.toLowerCase().trim()) {
+        return json({ valid: false, error: "Email não corresponde à licença" }, 403);
+      }
     }
 
     // --- ACTIVATE ---
     if (action === "activate") {
       if (!hardware_id) {
-        return new Response(JSON.stringify({ valid: false, error: "Missing hardware_id" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return json({ valid: false, error: "Hardware ID obrigatório" }, 400);
+      }
+      if (!email) {
+        return json({ valid: false, error: "Email obrigatório para ativação" }, 400);
+      }
+
+      // If license has no email yet, bind it now
+      if (!license.user_email) {
+        await supabase
+          .from("licenses")
+          .update({ user_email: email.toLowerCase().trim() })
+          .eq("id", license.id);
       }
 
       // Check existing activation for this hardware
@@ -72,23 +82,22 @@ Deno.serve(async (req) => {
         .maybeSingle();
 
       if (existing) {
-        // Re-activate
         await supabase
           .from("license_activations")
           .update({ is_active: true, last_seen_at: new Date().toISOString() })
           .eq("id", existing.id);
 
-        return new Response(JSON.stringify({ valid: true, message: "Already activated" }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        return json({
+          valid: true,
+          message: "Já ativado nesta máquina",
+          expires_at: license.expires_at,
+          email: license.user_email || email,
         });
       }
 
       // Check max activations
       if (license.current_activations >= license.max_activations) {
-        return new Response(JSON.stringify({ valid: false, error: "Max activations reached" }), {
-          status: 403,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return json({ valid: false, error: "Limite de máquinas atingido. Esta licença já está ativa em outro computador." }, 403);
       }
 
       // Create activation
@@ -101,21 +110,29 @@ Deno.serve(async (req) => {
 
       await supabase
         .from("licenses")
-        .update({ current_activations: license.current_activations + 1 })
+        .update({
+          current_activations: license.current_activations + 1,
+          hardware_id,
+        })
         .eq("id", license.id);
 
-      return new Response(JSON.stringify({ valid: true, message: "Activated successfully" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      return json({
+        valid: true,
+        message: "Licença ativada com sucesso!",
+        expires_at: license.expires_at,
+        email: license.user_email || email,
       });
     }
 
     // --- HEARTBEAT ---
     if (action === "heartbeat") {
       if (!hardware_id) {
-        return new Response(JSON.stringify({ valid: false, error: "Missing hardware_id" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return json({ valid: false, error: "Hardware ID obrigatório" }, 400);
+      }
+
+      // Verify email matches if provided
+      if (email && license.user_email && license.user_email.toLowerCase() !== email.toLowerCase()) {
+        return json({ valid: false, error: "Email não corresponde à licença" }, 403);
       }
 
       const { data: activation } = await supabase
@@ -127,10 +144,7 @@ Deno.serve(async (req) => {
         .maybeSingle();
 
       if (!activation) {
-        return new Response(JSON.stringify({ valid: false, error: "Not activated on this machine" }), {
-          status: 403,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return json({ valid: false, error: "Licença não ativada nesta máquina" }, 403);
       }
 
       await supabase
@@ -143,19 +157,24 @@ Deno.serve(async (req) => {
         .update({ last_heartbeat_at: new Date().toISOString() })
         .eq("id", license.id);
 
-      return new Response(JSON.stringify({ valid: true, message: "Heartbeat OK" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      return json({
+        valid: true,
+        message: "Heartbeat OK",
+        expires_at: license.expires_at,
       });
     }
 
-    // --- VALIDATE (simple check) ---
-    return new Response(JSON.stringify({ valid: true, expires_at: license.expires_at }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    // --- VALIDATE (simple check — also checks email) ---
+    if (email && license.user_email && license.user_email.toLowerCase() !== email.toLowerCase()) {
+      return json({ valid: false, error: "Email não corresponde à licença" }, 403);
+    }
+
+    return json({
+      valid: true,
+      expires_at: license.expires_at,
+      email: license.user_email,
     });
   } catch (err) {
-    return new Response(JSON.stringify({ valid: false, error: String(err) }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return json({ valid: false, error: String(err) }, 500);
   }
 });

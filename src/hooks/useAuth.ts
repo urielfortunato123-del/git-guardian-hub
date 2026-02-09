@@ -6,13 +6,14 @@ interface User {
   name: string;
   avatar: string;
   licenseKey: string;
+  email: string;
   expiresAt: string | null;
 }
 
 const STORAGE_KEY = "lovhub_license";
 
-function generateAvatar(key: string) {
-  return `https://api.dicebear.com/9.x/bottts-neutral/svg?seed=${encodeURIComponent(key)}`;
+function generateAvatar(seed: string) {
+  return `https://api.dicebear.com/9.x/bottts-neutral/svg?seed=${encodeURIComponent(seed)}`;
 }
 
 export function useAuth() {
@@ -28,8 +29,8 @@ export function useAuth() {
         const data = JSON.parse(saved);
         setUser(data);
         // Verify in background
-        verifyLicense(data.licenseKey).then((result) => {
-          if (!result.valid) {
+        callServer("validate", data.licenseKey, data.email).then((result) => {
+          if (result.valid === false) {
             localStorage.removeItem(STORAGE_KEY);
             setUser(null);
           }
@@ -40,36 +41,43 @@ export function useAuth() {
     }
   }, []);
 
-  const verifyLicense = async (key: string): Promise<{ valid: boolean; error?: string; expires_at?: string }> => {
+  const callServer = async (
+    action: string,
+    licenseKey: string,
+    email?: string,
+    hardwareId?: string
+  ): Promise<{ valid: boolean; error?: string; expires_at?: string; email?: string }> => {
     try {
       const resp = await supabase.functions.invoke("license-verify", {
-        body: { action: "validate", license_key: key },
+        body: { action, license_key: licenseKey, email, hardware_id: hardwareId },
       });
       if (resp.error) return { valid: false, error: resp.error.message };
-      return resp.data as { valid: boolean; error?: string; expires_at?: string };
-    } catch (e) {
-      return { valid: false, error: "Erro de conexão" };
+      return resp.data as { valid: boolean; error?: string; expires_at?: string; email?: string };
+    } catch {
+      return { valid: false, error: "Erro de conexão com o servidor" };
     }
   };
 
-  const login = useCallback(async (licenseKey: string) => {
+  const login = useCallback(async (licenseKey: string, email: string) => {
     setIsLoading(true);
     setError(null);
 
     try {
-      const result = await verifyLicense(licenseKey);
+      // Validate key + email match
+      const result = await callServer("validate", licenseKey, email);
 
-      if (!result.valid) {
-        setError(result.error || "Chave de licença inválida");
+      if (result.valid === false) {
+        setError(result.error || "Chave de licença ou email inválido");
         setIsLoading(false);
         return;
       }
 
       const userData: User = {
         login: licenseKey.slice(0, 12),
-        name: `Licenciado`,
-        avatar: generateAvatar(licenseKey),
+        name: email.split("@")[0],
+        avatar: generateAvatar(email),
         licenseKey,
+        email,
         expiresAt: result.expires_at || null,
       };
 

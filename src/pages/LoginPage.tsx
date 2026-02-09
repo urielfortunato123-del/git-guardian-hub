@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { Key, ArrowRight, Code2, Rocket, Sparkles, Stethoscope, Smartphone, AlertCircle, Shield } from "lucide-react";
+import { Key, ArrowRight, Code2, Rocket, Sparkles, Stethoscope, Smartphone, AlertCircle, Shield, Mail } from "lucide-react";
 import { motion } from "framer-motion";
 
 interface LoginPageProps {
-  onLogin: (licenseKey: string) => void;
+  onLogin: (licenseKey: string, email: string) => void;
   isLoading: boolean;
   error?: string | null;
 }
@@ -17,13 +17,16 @@ const features = [
 
 export function LoginPage({ onLogin, isLoading, error }: LoginPageProps) {
   const [licenseKey, setLicenseKey] = useState("");
+  const [email, setEmail] = useState("");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (licenseKey.trim()) {
-      onLogin(licenseKey.trim());
+    if (licenseKey.trim() && email.trim()) {
+      onLogin(licenseKey.trim(), email.trim().toLowerCase());
     }
   };
+
+  const isValid = licenseKey.trim().length > 0 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 
   return (
     <div className="min-h-screen flex">
@@ -52,6 +55,24 @@ export function LoginPage({ onLogin, isLoading, error }: LoginPageProps) {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="text-sm font-medium text-foreground mb-2 block">
+                Email
+              </label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="seu@email.com"
+                  className="w-full pl-10 pr-4 py-3.5 rounded-lg border border-input bg-background text-foreground text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-ring"
+                  disabled={isLoading}
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-foreground mb-2 block">
                 Chave de Licença
               </label>
               <div className="relative">
@@ -63,7 +84,6 @@ export function LoginPage({ onLogin, isLoading, error }: LoginPageProps) {
                   placeholder="LH-XXXXX-XXXXX-XXXXX-XXXXX"
                   className="w-full pl-10 pr-4 py-3.5 rounded-lg border border-input bg-background text-foreground font-mono text-sm tracking-wider placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-ring"
                   disabled={isLoading}
-                  autoFocus
                 />
               </div>
             </div>
@@ -81,7 +101,7 @@ export function LoginPage({ onLogin, isLoading, error }: LoginPageProps) {
 
             <button
               type="submit"
-              disabled={isLoading || !licenseKey.trim()}
+              disabled={isLoading || !isValid}
               className="w-full flex items-center justify-center gap-3 bg-foreground text-background py-3.5 px-6 rounded-lg font-semibold text-base hover:opacity-90 transition-opacity disabled:opacity-50"
             >
               <Key className="w-5 h-5" />
@@ -91,7 +111,7 @@ export function LoginPage({ onLogin, isLoading, error }: LoginPageProps) {
           </form>
 
           <p className="text-xs text-muted-foreground mt-4 text-center">
-            Licença vinculada ao hardware · Verificação online segura
+            Licença vinculada ao email + hardware · Verificação online segura
           </p>
 
           {/* Developer credit */}
@@ -128,7 +148,7 @@ export function LoginPage({ onLogin, isLoading, error }: LoginPageProps) {
 
           <div className="pt-6 border-t border-border">
             <p className="text-xs text-muted-foreground font-mono">
-              $ lovhub activate --key LH-***** ✨
+              $ lovhub activate --email you@mail.com --key LH-***** ✨
             </p>
           </div>
         </div>
