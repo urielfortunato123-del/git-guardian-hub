@@ -11,8 +11,9 @@ serve(async (req) => {
   }
 
   try {
+    const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+    if (!OPENROUTER_API_KEY && !LOVABLE_API_KEY) throw new Error("No AI API key configured");
 
     const { files, projectName, stack } = await req.json();
 
@@ -70,41 +71,42 @@ Analyze the project and return a JSON object with:
   "summary": "string (3-4 sentence overall assessment)"
 }`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
+    const messages = [
+      { role: "system", content: systemPrompt },
+      {
+        role: "user",
+        content: `Analyze this project "${projectName || "unknown"}" (detected stack: ${stack || "unknown"}):\n\n${fileList}`,
       },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          { role: "system", content: systemPrompt },
-          {
-            role: "user",
-            content: `Analyze this project "${projectName || "unknown"}" (detected stack: ${stack || "unknown"}):\n\n${fileList}`,
-          },
-        ],
-      }),
-    });
+    ];
+
+    // Try OpenRouter first, fallback to Lovable AI
+    let response: Response;
+    if (OPENROUTER_API_KEY) {
+      response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ model: "google/gemini-2.5-flash", messages }),
+      });
+    } else {
+      response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ model: "google/gemini-3-flash-preview", messages }),
+      });
+    }
 
     if (!response.ok) {
       const errText = await response.text();
       console.error("AI error:", response.status, errText);
-
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded. Try again shortly." }), {
-          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "Credits exhausted. Please add funds." }), {
-          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      return new Response(JSON.stringify({ error: `AI error: ${response.status}` }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      return new Response(JSON.stringify({ error: `AI error: ${response.status} - ${errText.slice(0, 200)}` }), {
+        status: response.status >= 400 && response.status < 500 ? response.status : 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
