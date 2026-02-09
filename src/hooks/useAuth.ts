@@ -5,12 +5,12 @@ interface User {
   login: string;
   name: string;
   avatar: string;
-  licenseKey: string;
   email: string;
+  licenseKey: string;
   expiresAt: string | null;
 }
 
-const STORAGE_KEY = "lovhub_license";
+type AuthStep = "login" | "activate" | "register";
 
 function generateAvatar(seed: string) {
   return `https://api.dicebear.com/9.x/bottts-neutral/svg?seed=${encodeURIComponent(seed)}`;
@@ -18,83 +18,219 @@ function generateAvatar(seed: string) {
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [step, setStep] = useState<AuthStep>("login");
 
-  // Restore session on mount
+  // Pending activation data (used between activate → register steps)
+  const [pendingActivation, setPendingActivation] = useState<{
+    licenseKey: string;
+    email: string;
+    expiresAt: string | null;
+  } | null>(null);
+
+  // Listen for auth state changes
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try {
-        const data = JSON.parse(saved);
-        setUser(data);
-        // Verify in background
-        callServer("validate", data.licenseKey, data.email).then((result) => {
-          if (result.valid === false) {
-            localStorage.removeItem(STORAGE_KEY);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (session?.user) {
+          // Fetch profile
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("*")
+            .eq("user_id", session.user.id)
+            .maybeSingle();
+
+          if (profile) {
+            setUser({
+              login: profile.display_name || profile.email.split("@")[0],
+              name: profile.display_name || profile.email.split("@")[0],
+              avatar: generateAvatar(profile.email),
+              email: profile.email,
+              licenseKey: profile.license_key,
+              expiresAt: null,
+            });
+            setStep("login");
+          } else {
+            // Authenticated but no profile — shouldn't happen normally
             setUser(null);
           }
-        });
-      } catch {
-        localStorage.removeItem(STORAGE_KEY);
+        } else {
+          setUser(null);
+        }
+        setIsLoading(false);
       }
-    }
+    );
+
+    // Check existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) {
+        setIsLoading(false);
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  const callServer = async (
-    action: string,
-    licenseKey: string,
-    email?: string,
-    hardwareId?: string
-  ): Promise<{ valid: boolean; error?: string; expires_at?: string; email?: string }> => {
-    try {
-      const resp = await supabase.functions.invoke("license-verify", {
-        body: { action, license_key: licenseKey, email, hardware_id: hardwareId },
-      });
-      if (resp.error) return { valid: false, error: resp.error.message };
-      return resp.data as { valid: boolean; error?: string; expires_at?: string; email?: string };
-    } catch {
-      return { valid: false, error: "Erro de conexão com o servidor" };
-    }
-  };
-
-  const login = useCallback(async (licenseKey: string, email: string) => {
+  // Step 1: Activate license (first time only)
+  const activateLicense = useCallback(async (licenseKey: string, email: string) => {
     setIsLoading(true);
     setError(null);
 
     try {
-      // Validate key + email match
-      const result = await callServer("validate", licenseKey, email);
+      const resp = await supabase.functions.invoke("license-verify", {
+        body: { action: "validate", license_key: licenseKey, email },
+      });
 
-      if (result.valid === false) {
-        setError(result.error || "Chave de licença ou email inválido");
+      if (resp.error) {
+        setError(resp.error.message);
         setIsLoading(false);
         return;
       }
 
-      const userData: User = {
-        login: licenseKey.slice(0, 12),
-        name: email.split("@")[0],
-        avatar: generateAvatar(email),
+      const data = resp.data as { valid: boolean; error?: string; expires_at?: string };
+
+      if (!data.valid) {
+        setError(data.error || "Chave ou email inválido");
+        setIsLoading(false);
+        return;
+      }
+
+      // License valid — move to register step
+      setPendingActivation({
         licenseKey,
         email,
-        expiresAt: result.expires_at || null,
-      };
-
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(userData));
-      setUser(userData);
+        expiresAt: data.expires_at || null,
+      });
+      setStep("register");
     } catch {
-      setError("Erro ao verificar licença. Tente novamente.");
+      setError("Erro de conexão. Tente novamente.");
     } finally {
       setIsLoading(false);
     }
   }, []);
 
-  const logout = useCallback(() => {
-    localStorage.removeItem(STORAGE_KEY);
+  // Step 2: Create account (email + password)
+  const register = useCallback(async (password: string, displayName: string) => {
+    if (!pendingActivation) {
+      setError("Ative a licença primeiro.");
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const { email, licenseKey } = pendingActivation;
+
+      // Create Supabase auth user
+      const { data: authData, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { emailRedirectTo: window.location.origin },
+      });
+
+      if (signUpError) {
+        // If user already exists, try login
+        if (signUpError.message.includes("already registered")) {
+          setError("Este email já tem conta. Faça login com sua senha.");
+          setStep("login");
+          setIsLoading(false);
+          return;
+        }
+        setError(signUpError.message);
+        setIsLoading(false);
+        return;
+      }
+
+      if (!authData.user) {
+        setError("Erro ao criar conta.");
+        setIsLoading(false);
+        return;
+      }
+
+      // Lookup license ID
+      const { data: licenseData } = await supabase
+        .from("licenses")
+        .select("id")
+        .eq("license_key", licenseKey)
+        .maybeSingle();
+
+      // Create profile
+      const { error: profileError } = await supabase.from("profiles").insert({
+        user_id: authData.user.id,
+        email,
+        display_name: displayName || email.split("@")[0],
+        license_key: licenseKey,
+        license_id: licenseData?.id || null,
+      });
+
+      if (profileError) {
+        console.error("Profile creation error:", profileError);
+      }
+
+      setPendingActivation(null);
+      // Auth state change listener will handle setting user
+    } catch {
+      setError("Erro ao criar conta. Tente novamente.");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [pendingActivation]);
+
+  // Login with email + password
+  const login = useCallback(async (email: string, password: string) => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (signInError) {
+        setError(signInError.message === "Invalid login credentials" 
+          ? "Email ou senha incorretos" 
+          : signInError.message);
+      }
+      // Auth state change listener will handle setting user
+    } catch {
+      setError("Erro de conexão. Tente novamente.");
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  const logout = useCallback(async () => {
+    await supabase.auth.signOut();
     setUser(null);
+    setError(null);
+    setStep("login");
+    setPendingActivation(null);
+  }, []);
+
+  const switchToActivate = useCallback(() => {
+    setStep("activate");
     setError(null);
   }, []);
 
-  return { user, isLoading, error, login, logout };
+  const switchToLogin = useCallback(() => {
+    setStep("login");
+    setError(null);
+  }, []);
+
+  return {
+    user,
+    isLoading,
+    error,
+    step,
+    pendingActivation,
+    activateLicense,
+    register,
+    login,
+    logout,
+    switchToActivate,
+    switchToLogin,
+  };
 }
