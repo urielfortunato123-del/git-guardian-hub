@@ -5,7 +5,8 @@ import ReactMarkdown from "react-markdown";
 import type { UploadedFile } from "@/lib/fileUtils";
 import { getLanguageFromPath } from "@/lib/fileUtils";
 import { ProjectAnalysis } from "@/components/ProjectAnalysis";
-import { AI_MODELS, DEFAULT_MODEL, MODEL_CATEGORIES, type AIModel } from "@/lib/aiModels";
+import { AI_MODELS, MODEL_CATEGORIES, type AIModel } from "@/lib/aiModels";
+import { useModel } from "@/contexts/ModelContext";
 
 interface Attachment {
   id: string;
@@ -56,7 +57,7 @@ export function AIChat({ files, onFileUpdate }: AIChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedModel, setSelectedModel] = useState<AIModel>(DEFAULT_MODEL);
+  const { selectedModel, setSelectedModel } = useModel();
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [reasoningEnabled, setReasoningEnabled] = useState(true);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
