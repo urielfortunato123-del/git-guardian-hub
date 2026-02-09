@@ -15,6 +15,7 @@ import { LocalEditorPage } from "@/pages/LocalEditorPage";
 import { RepoDocterPage } from "@/pages/RepoDocterPage";
 import { DeployPage } from "@/pages/DeployPage";
 import { WorkflowPage } from "@/pages/WorkflowPage";
+import { ModelsPage } from "@/pages/ModelsPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -38,6 +39,7 @@ function AppRoutes() {
         <Route path="/local-editor" element={<LocalEditorPage />} />
         <Route path="/repo-doctor" element={<RepoDocterPage />} />
         <Route path="/workflow" element={<WorkflowPage />} />
+        <Route path="/models" element={<ModelsPage />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </AppLayout>
