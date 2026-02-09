@@ -107,19 +107,17 @@ function LocalSetupGuide() {
             <ol className="list-decimal list-inside space-y-2">
               <li>Baixe em <a href="https://lmstudio.ai" target="_blank" rel="noopener" className="text-primary hover:underline inline-flex items-center gap-1">lmstudio.ai <ExternalLink className="w-3 h-3" /></a></li>
               <li>Abra o app e baixe um modelo (ex: <code className="bg-secondary px-1 rounded text-foreground">Qwen 2.5 Coder 7B</code>)</li>
-              <li>Vá em <strong className="text-foreground">Developer → Start Server</strong></li>
-              <li>Habilite <strong className="text-foreground">CORS</strong> nas configurações do servidor</li>
+              <li>Vá em <strong className="text-foreground">Settings → Developer</strong> e ative <strong className="text-foreground">Developer Mode → ON</strong></li>
+              <li>No menu lateral, clique em <strong className="text-foreground">Runtime</strong> para verificar se o servidor local está disponível</li>
+              <li>Volte à tela principal e inicie o servidor local (ícone de terminal/servidor)</li>
               <li>O servidor roda em <code className="bg-secondary px-1 rounded text-foreground">http://localhost:1234/v1</code></li>
             </ol>
-            <div className="flex items-center gap-2 mt-2">
-              <code className="flex-1 bg-secondary px-3 py-1.5 rounded text-foreground text-xs font-mono">http://localhost:1234/v1</code>
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => copyText("http://localhost:1234/v1", "lms")}>
-                {copied === "lms" ? <CheckCheck className="w-3.5 h-3.5 text-primary" /> : <Copy className="w-3.5 h-3.5" />}
-              </Button>
-            </div>
             <div className="bg-secondary/50 border border-border rounded-lg p-3 flex items-start gap-2">
               <Info className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
-              <p><strong className="text-foreground">CORS:</strong> Em Server Settings, ative "Enable CORS" ou adicione <code className="text-foreground">*</code> nos allowed origins.</p>
+              <div>
+                <p><strong className="text-foreground">Developer Mode:</strong> Em <code className="text-foreground">Settings → Developer</code>, mude para <strong className="text-foreground">ON</strong>. Isso habilita controles avançados e o servidor local.</p>
+                <p className="mt-1"><strong className="text-foreground">CORS:</strong> O LM Studio já aceita conexões locais por padrão com Developer Mode ativado. Se tiver problemas, verifique se nenhum firewall está bloqueando a porta 1234.</p>
+              </div>
             </div>
           </AccordionContent>
         </AccordionItem>
