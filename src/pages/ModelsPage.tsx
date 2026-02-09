@@ -1,10 +1,18 @@
 import { useState } from "react";
-import { Search, Check, AlertTriangle, Cpu, Cloud, Monitor, Zap } from "lucide-react";
+import { Search, Check, AlertTriangle, Cpu, Cloud, Monitor, Zap, ExternalLink, Copy, CheckCheck, Info } from "lucide-react";
 import { motion } from "framer-motion";
 import { AI_MODELS, MODEL_CATEGORIES, type AIModel } from "@/lib/aiModels";
 import { useModel } from "@/contexts/ModelContext";
 import { getAllUserKeys } from "@/components/APIKeysSettings";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 
 type CategoryKey = AIModel["category"];
 
@@ -30,6 +38,191 @@ function getModelReady(model: AIModel): { ok: boolean; reason: string } {
       : { ok: true, reason: "Via servidor (key backend)" };
   }
   return { ok: false, reason: "Provedor desconhecido" };
+}
+
+const LOCAL_STORAGE_KEY = "lovhub_local_endpoints";
+
+interface LocalEndpoint {
+  id: string;
+  name: string;
+  url: string;
+}
+
+function getLocalEndpoints(): LocalEndpoint[] {
+  try {
+    return JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || "[]");
+  } catch { return []; }
+}
+
+function saveLocalEndpoints(list: LocalEndpoint[]) {
+  localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(list));
+}
+
+function LocalSetupGuide() {
+  const [endpoints, setEndpoints] = useState<LocalEndpoint[]>(getLocalEndpoints);
+  const [newName, setNewName] = useState("");
+  const [newUrl, setNewUrl] = useState("http://localhost:");
+  const [copied, setCopied] = useState<string | null>(null);
+
+  const addEndpoint = () => {
+    if (!newName.trim() || !newUrl.trim()) return;
+    const id = newName.toLowerCase().replace(/[^a-z0-9]/g, "_");
+    const updated = [...endpoints, { id, name: newName.trim(), url: newUrl.trim() }];
+    setEndpoints(updated);
+    saveLocalEndpoints(updated);
+    setNewName("");
+    setNewUrl("http://localhost:");
+  };
+
+  const removeEndpoint = (id: string) => {
+    const updated = endpoints.filter((e) => e.id !== id);
+    setEndpoints(updated);
+    saveLocalEndpoints(updated);
+  };
+
+  const copyText = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(id);
+    setTimeout(() => setCopied(null), 2000);
+  };
+
+  return (
+    <div className="mb-8 rounded-xl border border-border bg-card p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <Monitor className="w-5 h-5 text-primary" />
+        <h2 className="text-lg font-semibold text-foreground">IA Local</h2>
+      </div>
+
+      <p className="text-sm text-muted-foreground mb-4">
+        Rode modelos de IA no seu próprio computador, sem depender de nuvem. Totalmente gratuito e privado.
+      </p>
+
+      <Accordion type="multiple" className="space-y-2">
+        {/* LM Studio */}
+        <AccordionItem value="lmstudio" className="border border-border rounded-lg px-4">
+          <AccordionTrigger className="text-sm font-medium hover:no-underline">
+            <span className="flex items-center gap-2">🖥️ LM Studio</span>
+          </AccordionTrigger>
+          <AccordionContent className="text-xs text-muted-foreground space-y-3 pb-4">
+            <ol className="list-decimal list-inside space-y-2">
+              <li>Baixe em <a href="https://lmstudio.ai" target="_blank" rel="noopener" className="text-primary hover:underline inline-flex items-center gap-1">lmstudio.ai <ExternalLink className="w-3 h-3" /></a></li>
+              <li>Abra o app e baixe um modelo (ex: <code className="bg-secondary px-1 rounded text-foreground">Qwen 2.5 Coder 7B</code>)</li>
+              <li>Vá em <strong className="text-foreground">Developer → Start Server</strong></li>
+              <li>Habilite <strong className="text-foreground">CORS</strong> nas configurações do servidor</li>
+              <li>O servidor roda em <code className="bg-secondary px-1 rounded text-foreground">http://localhost:1234/v1</code></li>
+            </ol>
+            <div className="flex items-center gap-2 mt-2">
+              <code className="flex-1 bg-secondary px-3 py-1.5 rounded text-foreground text-xs font-mono">http://localhost:1234/v1</code>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => copyText("http://localhost:1234/v1", "lms")}>
+                {copied === "lms" ? <CheckCheck className="w-3.5 h-3.5 text-primary" /> : <Copy className="w-3.5 h-3.5" />}
+              </Button>
+            </div>
+            <div className="bg-secondary/50 border border-border rounded-lg p-3 flex items-start gap-2">
+              <Info className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+              <p><strong className="text-foreground">CORS:</strong> Em Server Settings, ative "Enable CORS" ou adicione <code className="text-foreground">*</code> nos allowed origins.</p>
+            </div>
+          </AccordionContent>
+        </AccordionItem>
+
+        {/* Ollama */}
+        <AccordionItem value="ollama" className="border border-border rounded-lg px-4">
+          <AccordionTrigger className="text-sm font-medium hover:no-underline">
+            <span className="flex items-center gap-2">🦙 Ollama</span>
+          </AccordionTrigger>
+          <AccordionContent className="text-xs text-muted-foreground space-y-3 pb-4">
+            <ol className="list-decimal list-inside space-y-2">
+              <li>Instale em <a href="https://ollama.com" target="_blank" rel="noopener" className="text-primary hover:underline inline-flex items-center gap-1">ollama.com <ExternalLink className="w-3 h-3" /></a></li>
+              <li>No terminal, baixe um modelo:</li>
+            </ol>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 bg-secondary px-3 py-1.5 rounded text-foreground text-xs font-mono">ollama pull qwen2.5-coder:7b</code>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => copyText("ollama pull qwen2.5-coder:7b", "oll1")}>
+                {copied === "oll1" ? <CheckCheck className="w-3.5 h-3.5 text-primary" /> : <Copy className="w-3.5 h-3.5" />}
+              </Button>
+            </div>
+            <p>3. Inicie o servidor com CORS habilitado:</p>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 bg-secondary px-3 py-1.5 rounded text-foreground text-xs font-mono">OLLAMA_ORIGINS=* ollama serve</code>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => copyText("OLLAMA_ORIGINS=* ollama serve", "oll2")}>
+                {copied === "oll2" ? <CheckCheck className="w-3.5 h-3.5 text-primary" /> : <Copy className="w-3.5 h-3.5" />}
+              </Button>
+            </div>
+            <p>4. Endpoint padrão:</p>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 bg-secondary px-3 py-1.5 rounded text-foreground text-xs font-mono">http://localhost:11434/v1</code>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => copyText("http://localhost:11434/v1", "oll3")}>
+                {copied === "oll3" ? <CheckCheck className="w-3.5 h-3.5 text-primary" /> : <Copy className="w-3.5 h-3.5" />}
+              </Button>
+            </div>
+            <div className="bg-secondary/50 border border-border rounded-lg p-3 flex items-start gap-2">
+              <Info className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+              <div>
+                <p><strong className="text-foreground">Modelos recomendados para código:</strong></p>
+                <ul className="list-disc list-inside mt-1 space-y-0.5">
+                  <li><code className="text-foreground">qwen2.5-coder:7b</code> — rápido, 4.5 GB</li>
+                  <li><code className="text-foreground">codellama:13b</code> — equilibrado, 7 GB</li>
+                  <li><code className="text-foreground">deepseek-coder-v2:16b</code> — poderoso, 9 GB</li>
+                </ul>
+              </div>
+            </div>
+          </AccordionContent>
+        </AccordionItem>
+
+        {/* Outros / Custom */}
+        <AccordionItem value="custom" className="border border-border rounded-lg px-4">
+          <AccordionTrigger className="text-sm font-medium hover:no-underline">
+            <span className="flex items-center gap-2">⚙️ Outro servidor compatível com OpenAI</span>
+          </AccordionTrigger>
+          <AccordionContent className="text-xs text-muted-foreground space-y-3 pb-4">
+            <p>Qualquer servidor que exponha uma API compatível com <code className="bg-secondary px-1 rounded text-foreground">/v1/chat/completions</code> funciona. Exemplos:</p>
+            <ul className="list-disc list-inside space-y-1">
+              <li><strong className="text-foreground">vLLM</strong> — <code className="text-foreground">python -m vllm.entrypoints.openai.api_server</code></li>
+              <li><strong className="text-foreground">text-generation-webui</strong> — com extensão OpenAI API</li>
+              <li><strong className="text-foreground">LocalAI</strong> — <a href="https://localai.io" target="_blank" rel="noopener" className="text-primary hover:underline">localai.io</a></li>
+              <li><strong className="text-foreground">Jan</strong> — <a href="https://jan.ai" target="_blank" rel="noopener" className="text-primary hover:underline">jan.ai</a></li>
+            </ul>
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
+
+      {/* Custom endpoints */}
+      <div className="mt-5 border-t border-border pt-4">
+        <p className="text-xs font-medium text-foreground mb-3">Endpoints configurados</p>
+
+        {endpoints.length > 0 && (
+          <div className="space-y-2 mb-3">
+            {endpoints.map((ep) => (
+              <div key={ep.id} className="flex items-center gap-2 bg-secondary/50 rounded-lg px-3 py-2">
+                <span className="text-xs font-medium text-foreground">{ep.name}</span>
+                <code className="text-[10px] text-muted-foreground font-mono flex-1 truncate">{ep.url}</code>
+                <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive hover:text-destructive" onClick={() => removeEndpoint(ep.id)}>
+                  <AlertTriangle className="w-3 h-3" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="flex gap-2">
+          <Input
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder="Nome (ex: Meu vLLM)"
+            className="h-8 text-xs flex-1"
+          />
+          <Input
+            value={newUrl}
+            onChange={(e) => setNewUrl(e.target.value)}
+            placeholder="http://localhost:8000/v1"
+            className="h-8 text-xs font-mono flex-1"
+          />
+          <Button variant="outline" size="sm" className="h-8" onClick={addEndpoint}>
+            Adicionar
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function ModelsPage() {
@@ -66,6 +259,9 @@ export function ModelsPage() {
           {AI_MODELS.length} modelos disponíveis • Clique para selecionar
         </p>
       </div>
+
+      {/* Local AI setup guide */}
+      <LocalSetupGuide />
 
       {/* Search */}
       <div className="relative mb-4">
@@ -118,7 +314,6 @@ export function ModelsPage() {
                   : "border-border bg-card hover:border-primary/40 hover:bg-secondary/50"
               }`}
             >
-              {/* Active indicator */}
               {isActive && (
                 <span className="absolute top-3 right-3">
                   <Check className="w-4 h-4 text-primary" />
