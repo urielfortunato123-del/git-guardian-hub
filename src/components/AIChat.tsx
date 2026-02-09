@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { Send, Bot, User, Loader2, Sparkles, ChevronDown } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import type { UploadedFile } from "@/lib/fileUtils";
+import { ProjectAnalysis } from "@/components/ProjectAnalysis";
 
 interface Message {
   role: "user" | "assistant";
@@ -288,6 +289,9 @@ CURRENT PROJECT FILES:`;
           )}
         </div>
       </div>
+
+      {/* Project Analysis */}
+      <ProjectAnalysis files={files} />
 
       {/* File count */}
       <div className="px-4 py-1.5 border-b border-border bg-secondary/30">
