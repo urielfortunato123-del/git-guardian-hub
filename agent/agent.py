@@ -11,6 +11,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 from typing import Optional, List
+from datetime import datetime
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -21,6 +22,9 @@ from pathspec.patterns.gitwildmatch import GitWildMatchPattern
 
 APP_ROOT = Path(os.environ.get("INFINITY_WORKDIR", str(Path.home() / ".infinity_agent"))).resolve()
 APP_ROOT.mkdir(parents=True, exist_ok=True)
+
+BACKUPS_ROOT = APP_ROOT / "backups"
+BACKUPS_ROOT.mkdir(parents=True, exist_ok=True)
 
 DEFAULT_IGNORE = """
 .git/
@@ -135,10 +139,27 @@ class BuildReq(BaseModel):
     target: str  # "python-linux", "python-exe", "java"
     entry: Optional[str] = None
 
+class WriteFile(BaseModel):
+    project_id: str
+    path: str
+    content: str
+
+class WriteMultipleFiles(BaseModel):
+    project_id: str
+    files: List[dict]  # [{"path": "...", "content": "..."}]
+
+class BackupCreate(BaseModel):
+    project_id: str
+    label: Optional[str] = None
+
+class BackupRestore(BaseModel):
+    project_id: str
+    backup_id: str
+
 
 # ── App ──
 
-app = FastAPI(title="Lovable Infinity Agent", version="0.2.0")
+app = FastAPI(title="Lovable Infinity Agent", version="0.3.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -161,7 +182,7 @@ def project_path(project_id: str) -> Path:
 
 @app.get("/health")
 def health():
-    return {"ok": True, "workdir": str(APP_ROOT), "version": "0.2.0"}
+    return {"ok": True, "workdir": str(APP_ROOT), "version": "0.3.0"}
 
 @app.post("/v1/import/github")
 def import_github(req: ImportGitHub):
@@ -211,6 +232,55 @@ def read_file(project_id: str, path: str):
         raise HTTPException(403, "Access to sensitive files is blocked")
     
     return {"path": path, "content": p.read_text(errors="ignore")}
+
+@app.get("/v1/project/files-batch")
+def read_files_batch(project_id: str, paths: str):
+    """Read multiple files at once. paths is comma-separated."""
+    repo_dir = project_path(project_id)
+    result = []
+    blocked = [".env", "id_rsa", ".pem", ".pfx", ".key"]
+    for path in paths.split(","):
+        path = path.strip()
+        if not path:
+            continue
+        p = (repo_dir / path).resolve()
+        if not str(p).startswith(str(repo_dir)):
+            continue
+        if not p.exists() or not p.is_file():
+            continue
+        if any(p.name.lower().endswith(ext) or p.name.lower() == ext.lstrip(".") for ext in blocked):
+            continue
+        if p.stat().st_size > 500_000:
+            continue
+        result.append({"path": path, "content": p.read_text(errors="ignore")})
+    return {"files": result}
+
+@app.post("/v1/project/write-file")
+def write_file(req: WriteFile):
+    """Write a single file to the project."""
+    repo_dir = project_path(req.project_id)
+    p = (repo_dir / req.path).resolve()
+    if not str(p).startswith(str(repo_dir)):
+        raise HTTPException(400, "Invalid path")
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(req.content, encoding="utf-8")
+    return {"ok": True, "path": req.path}
+
+@app.post("/v1/project/write-files")
+def write_files(req: WriteMultipleFiles):
+    """Write multiple files to the project at once."""
+    repo_dir = project_path(req.project_id)
+    written = []
+    for f in req.files:
+        path = f.get("path", "")
+        content = f.get("content", "")
+        p = (repo_dir / path).resolve()
+        if not str(p).startswith(str(repo_dir)):
+            continue
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(content, encoding="utf-8")
+        written.append(path)
+    return {"ok": True, "written": written}
 
 @app.post("/v1/patch/apply")
 def apply_patch(req: ApplyPatch):
@@ -302,6 +372,110 @@ def build(req: BuildReq):
         return {"ok": True, "message": "Java package built. Use jpackage on target OS for installer."}
     else:
         raise HTTPException(400, f"Unknown build target: {req.target}")
+
+
+# ── Backup / Restore ──
+
+@app.post("/v1/backup/create")
+def backup_create(req: BackupCreate):
+    """Create a snapshot backup of the project."""
+    repo_dir = project_path(req.project_id)
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    label = req.label or "manual"
+    label_safe = re.sub(r'[^a-zA-Z0-9_-]', '_', label)[:40]
+    backup_id = f"{req.project_id}_{ts}_{label_safe}"
+    backup_dir = BACKUPS_ROOT / backup_id
+    
+    # Copy project files (excluding heavy dirs)
+    spec = load_ignore(repo_dir)
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    
+    files_copied = 0
+    for p in repo_dir.rglob("*"):
+        if p.is_file():
+            rel = str(p.relative_to(repo_dir)).replace("\\", "/")
+            if spec.match_file(rel):
+                continue
+            if p.stat().st_size > 2_000_000:
+                continue
+            dest = backup_dir / rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(p, dest)
+            files_copied += 1
+    
+    # Save metadata
+    meta = {
+        "project_id": req.project_id,
+        "backup_id": backup_id,
+        "label": req.label or "manual",
+        "created_at": datetime.now().isoformat(),
+        "files_count": files_copied,
+    }
+    (backup_dir / ".backup_meta.json").write_text(json.dumps(meta, indent=2))
+    
+    return meta
+
+@app.get("/v1/backup/list")
+def backup_list(project_id: str):
+    """List all backups for a project."""
+    backups = []
+    for d in sorted(BACKUPS_ROOT.iterdir(), reverse=True):
+        if not d.is_dir():
+            continue
+        meta_file = d / ".backup_meta.json"
+        if meta_file.exists():
+            meta = json.loads(meta_file.read_text())
+            if meta.get("project_id") == project_id:
+                backups.append(meta)
+    return {"backups": backups}
+
+@app.post("/v1/backup/restore")
+def backup_restore(req: BackupRestore):
+    """Restore a project from a backup. Creates an auto-backup first."""
+    repo_dir = project_path(req.project_id)
+    backup_dir = (BACKUPS_ROOT / req.backup_id).resolve()
+    if not str(backup_dir).startswith(str(BACKUPS_ROOT)):
+        raise HTTPException(400, "Invalid backup id")
+    if not backup_dir.exists():
+        raise HTTPException(404, "Backup not found")
+    
+    # Auto-backup before restore
+    auto_req = BackupCreate(project_id=req.project_id, label="pre-restore-auto")
+    backup_create(auto_req)
+    
+    # Restore: remove current files (except .git) and copy backup
+    spec = load_ignore(repo_dir)
+    for p in repo_dir.rglob("*"):
+        if p.is_file():
+            rel = str(p.relative_to(repo_dir)).replace("\\", "/")
+            if rel.startswith(".git/"):
+                continue
+            if spec.match_file(rel):
+                continue
+            p.unlink()
+    
+    # Copy backup files into project
+    files_restored = 0
+    for p in backup_dir.rglob("*"):
+        if p.is_file() and p.name != ".backup_meta.json":
+            rel = str(p.relative_to(backup_dir)).replace("\\", "/")
+            dest = repo_dir / rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(p, dest)
+            files_restored += 1
+    
+    return {"ok": True, "files_restored": files_restored}
+
+@app.delete("/v1/backup/delete")
+def backup_delete(backup_id: str):
+    """Delete a backup."""
+    backup_dir = (BACKUPS_ROOT / backup_id).resolve()
+    if not str(backup_dir).startswith(str(BACKUPS_ROOT)):
+        raise HTTPException(400, "Invalid backup id")
+    if not backup_dir.exists():
+        raise HTTPException(404, "Backup not found")
+    shutil.rmtree(backup_dir)
+    return {"ok": True}
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { GitBranch, FolderGit2, Plus, Rocket, LayoutDashboard, LogOut, Settings, Sparkles, Stethoscope, Workflow, Cpu } from "lucide-react";
+import { GitBranch, FolderGit2, Plus, Rocket, LayoutDashboard, LogOut, Settings, Sparkles, Stethoscope, Workflow, Cpu, Wrench } from "lucide-react";
 import { GlobalModelSelector } from "@/components/GlobalModelSelector";
 import { APIKeysSettings } from "@/components/APIKeysSettings";
 
@@ -15,6 +15,7 @@ const navItems = [
   { path: "/workflow", label: "Agente", icon: Workflow },
   { path: "/local-editor", label: "AI Editor", icon: Sparkles },
   { path: "/models", label: "Modelos IA", icon: Cpu },
+  { path: "/self-improve", label: "Melhorias", icon: Wrench },
   { path: "/repo-doctor", label: "Repo Doctor", icon: Stethoscope },
   { path: "/new", label: "Novo Projeto", icon: Plus },
   { path: "/deploy", label: "Deploy", icon: Rocket },
