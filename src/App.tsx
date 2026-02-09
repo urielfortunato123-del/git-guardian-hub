@@ -24,10 +24,22 @@ import NotFound from "./pages/NotFound";
 const queryClient = new QueryClient();
 
 function AppRoutes() {
-  const { user, isLoading, error, login, logout } = useAuth();
+  const { user, isLoading, error, step, pendingActivation, activateLicense, register, login, logout, switchToActivate, switchToLogin } = useAuth();
 
   if (!user) {
-    return <LoginPage onLogin={login} isLoading={isLoading} error={error} />;
+    return (
+      <LoginPage
+        step={step}
+        isLoading={isLoading}
+        error={error}
+        pendingActivation={pendingActivation}
+        onActivate={activateLicense}
+        onRegister={register}
+        onLogin={login}
+        onSwitchToActivate={switchToActivate}
+        onSwitchToLogin={switchToLogin}
+      />
+    );
   }
 
   return (
