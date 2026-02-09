@@ -23,6 +23,7 @@ export const AI_MODELS: AIModel[] = [
   { id: "openai/gpt-5.2", name: "GPT-5.2", provider: "OpenAI", icon: "🟢", supportsReasoning: true, providerBackend: "lovable", category: "cloud-premium" },
 
   // === OpenRouter (needs OPENROUTER_API_KEY) ===
+  { id: "openai/gpt-oss-120b:exacto", name: "GPT-OSS 120B Exacto", provider: "OpenAI", icon: "🧠", supportsReasoning: true, providerBackend: "openrouter", category: "cloud-free" },
   { id: "openai/gpt-oss-20b:free", name: "GPT-OSS 20B (Free)", provider: "OpenAI", icon: "🆓", supportsReasoning: true, providerBackend: "openrouter", category: "cloud-free" },
   { id: "anthropic/claude-3.5-sonnet", name: "Claude 3.5 Sonnet", provider: "Anthropic", icon: "🟠", providerBackend: "openrouter", category: "cloud-premium" },
   { id: "anthropic/claude-3-opus", name: "Claude 3 Opus", provider: "Anthropic", icon: "🟠", providerBackend: "openrouter", category: "cloud-premium" },
