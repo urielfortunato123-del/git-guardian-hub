@@ -43,6 +43,11 @@ const PROVIDERS = {
     getKey: () => Deno.env.get("OPENROUTER_API_KEY"),
     models: [] as string[], // accepts any model
   },
+  huggingface: {
+    url: "https://router.huggingface.co/v1/chat/completions",
+    getKey: () => Deno.env.get("HUGGINGFACE_API_KEY"),
+    models: [] as string[], // accepts any HF model
+  },
 };
 
 function buildSystemPrompt(files?: Record<string, string>): string {
@@ -87,11 +92,10 @@ CURRENT PROJECT FILES:`;
   return systemPrompt;
 }
 
-function resolveProvider(model: string, preferredProvider?: string): "lovable" | "openrouter" {
-  if (preferredProvider === "lovable" || preferredProvider === "openrouter") {
+function resolveProvider(model: string, preferredProvider?: string): "lovable" | "openrouter" | "huggingface" {
+  if (preferredProvider === "lovable" || preferredProvider === "openrouter" || preferredProvider === "huggingface") {
     return preferredProvider;
   }
-  // Auto: check if model is in Lovable's supported list
   if (PROVIDERS.lovable.models.includes(model)) {
     return "lovable";
   }
@@ -99,7 +103,7 @@ function resolveProvider(model: string, preferredProvider?: string): "lovable" |
 }
 
 async function callProvider(
-  providerName: "lovable" | "openrouter",
+  providerName: "lovable" | "openrouter" | "huggingface",
   body: Record<string, unknown>
 ): Promise<Response> {
   const provider = PROVIDERS[providerName];
