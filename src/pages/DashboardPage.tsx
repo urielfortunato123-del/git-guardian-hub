@@ -1,31 +1,93 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Search, Lock, Globe, Star, Clock, ArrowRight } from "lucide-react";
+import { Search, Lock, Globe, Star, Clock, ArrowRight, Github, Settings } from "lucide-react";
 import { motion } from "framer-motion";
 import { mockRepos, languageColors } from "@/data/mockData";
+import { useGitHub } from "@/hooks/useGitHub";
+import { GitHubConnect } from "@/components/GitHubConnect";
 
 export function DashboardPage() {
   const [query, setQuery] = useState("");
+  const [showGitHubSetup, setShowGitHubSetup] = useState(false);
+  const github = useGitHub();
 
-  const filtered = mockRepos.filter(
+  const isGitHubConnected = github.isConnected;
+
+  // Use real repos if connected, otherwise mock
+  const displayRepos = isGitHubConnected
+    ? github.repos.map(r => ({
+        id: r.id,
+        name: r.name,
+        full_name: r.full_name,
+        owner: r.owner.login,
+        description: r.description || "Sem descrição",
+        language: r.language || "Unknown",
+        stars: r.stargazers_count,
+        private: r.private,
+        updated_at: r.updated_at,
+      }))
+    : mockRepos;
+
+  const filtered = displayRepos.filter(
     (r) =>
       r.full_name.toLowerCase().includes(query.toLowerCase()) ||
-      r.description.toLowerCase().includes(query.toLowerCase())
+      (r.description || "").toLowerCase().includes(query.toLowerCase())
   );
+
+  if (showGitHubSetup && !isGitHubConnected) {
+    return (
+      <div className="p-6 max-w-5xl mx-auto">
+        <button
+          onClick={() => setShowGitHubSetup(false)}
+          className="text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors"
+        >
+          ← Voltar
+        </button>
+        <GitHubConnect
+          onConnect={(token) => github.setToken(token)}
+          isLoading={github.isLoading}
+          error={github.error}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Repositórios</h1>
-          <p className="text-sm text-muted-foreground mt-1">{mockRepos.length} repos encontrados</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            {isGitHubConnected
+              ? `${github.repos.length} repos do GitHub • @${github.user?.login}`
+              : `${mockRepos.length} repos (demo)`}
+          </p>
         </div>
-        <Link
-          to="/new"
-          className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity"
-        >
-          Novo Projeto
-        </Link>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              if (isGitHubConnected) {
+                github.setToken(null);
+              } else {
+                setShowGitHubSetup(true);
+              }
+            }}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+              isGitHubConnected
+                ? "bg-green-500/15 text-green-400 hover:bg-green-500/25"
+                : "bg-secondary text-muted-foreground hover:text-foreground hover:bg-secondary/80"
+            }`}
+          >
+            <Github className="w-4 h-4" />
+            {isGitHubConnected ? `@${github.user?.login}` : "Conectar GitHub"}
+          </button>
+          <Link
+            to="/new"
+            className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity"
+          >
+            Novo Projeto
+          </Link>
+        </div>
       </div>
 
       {/* Search */}
@@ -49,7 +111,7 @@ export function DashboardPage() {
             transition={{ duration: 0.2, delay: i * 0.05 }}
           >
             <Link
-              to={`/repo/${repo.owner}/${repo.name}`}
+              to={`/repo/${repo.owner || repo.full_name.split("/")[0]}/${repo.name}`}
               className="group flex items-center gap-4 p-4 bg-card border border-border rounded-lg hover:border-primary/40 hover:bg-secondary/50 transition-all"
             >
               <div className="flex-1 min-w-0">

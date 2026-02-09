@@ -46,3 +46,7 @@ inspector_port = 8083
 [functions.ai-chat]
 enabled = true
 verify_jwt = false
+
+[functions.github-proxy]
+enabled = true
+verify_jwt = false

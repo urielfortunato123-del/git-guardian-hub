@@ -3,6 +3,7 @@ import { Send, Bot, User, Loader2, Sparkles, ChevronDown, Brain } from "lucide-r
 import ReactMarkdown from "react-markdown";
 import type { UploadedFile } from "@/lib/fileUtils";
 import { ProjectAnalysis } from "@/components/ProjectAnalysis";
+import { AI_MODELS, DEFAULT_MODEL, MODEL_CATEGORIES, type AIModel } from "@/lib/aiModels";
 
 interface Message {
   role: "user" | "assistant";
@@ -16,39 +17,11 @@ interface AIChatProps {
   onFileUpdate: (path: string, content: string) => void;
 }
 
-interface AIModel {
-  id: string;
-  name: string;
-  provider: string;
-  icon: string;
-  isLocal?: boolean;
-  baseUrl?: string;
-  supportsReasoning?: boolean;
-}
-
-const AI_MODELS: AIModel[] = [
-  // Local models
-  { id: "local/lm-studio", name: "LM Studio", provider: "Local", icon: "🖥️", isLocal: true, baseUrl: "http://localhost:1234/v1" },
-  { id: "local/ollama", name: "Ollama", provider: "Local", icon: "🦙", isLocal: true, baseUrl: "http://localhost:11434/v1" },
-  // Free models with reasoning
-  { id: "openai/gpt-oss-20b:free", name: "GPT-OSS 20B (Free)", provider: "OpenAI", icon: "🆓", supportsReasoning: true },
-  // Cloud models via OpenRouter
-  { id: "openai/gpt-4o-mini", name: "GPT-4o Mini", provider: "OpenAI", icon: "🟢" },
-  { id: "openai/gpt-4o", name: "GPT-4o", provider: "OpenAI", icon: "🟢" },
-  { id: "openai/gpt-4-turbo", name: "GPT-4 Turbo", provider: "OpenAI", icon: "🟢" },
-  { id: "anthropic/claude-3.5-sonnet", name: "Claude 3.5 Sonnet", provider: "Anthropic", icon: "🟠" },
-  { id: "anthropic/claude-3-opus", name: "Claude 3 Opus", provider: "Anthropic", icon: "🟠" },
-  { id: "google/gemini-pro-1.5", name: "Gemini Pro 1.5", provider: "Google", icon: "🔵" },
-  { id: "google/gemini-flash-1.5", name: "Gemini Flash 1.5", provider: "Google", icon: "🔵" },
-  { id: "meta-llama/llama-3.1-70b-instruct", name: "Llama 3.1 70B", provider: "Meta", icon: "🟣" },
-  { id: "deepseek/deepseek-coder", name: "DeepSeek Coder", provider: "DeepSeek", icon: "⚫" },
-];
-
 export function AIChat({ files, onFileUpdate }: AIChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedModel, setSelectedModel] = useState(AI_MODELS[2]); // GPT-OSS free by default
+  const [selectedModel, setSelectedModel] = useState<AIModel>(DEFAULT_MODEL);
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [reasoningEnabled, setReasoningEnabled] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -166,6 +139,7 @@ CURRENT PROJECT FILES:`;
               files: filesObj,
               model: selectedModel.id,
               reasoning: reasoningEnabled && selectedModel.supportsReasoning,
+              provider: selectedModel.providerBackend || "auto",
             }),
           }
         );
@@ -299,36 +273,47 @@ CURRENT PROJECT FILES:`;
             </button>
             
             {showModelPicker && (
-              <div className="absolute right-0 top-full mt-1 w-56 bg-popover border border-border rounded-lg shadow-lg z-50 py-1 max-h-72 overflow-auto">
-                {AI_MODELS.map((model) => (
-                  <button
-                    key={model.id}
-                    onClick={() => {
-                      setSelectedModel(model);
-                      setShowModelPicker(false);
-                    }}
-                    className={`w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-secondary/60 transition-colors ${
-                      selectedModel.id === model.id ? "bg-primary/10" : ""
-                    }`}
-                  >
-                    <span className="text-sm">{model.icon}</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <p className="text-sm font-medium text-foreground truncate">{model.name}</p>
-                        {model.isLocal && (
-                          <span className="text-[10px] px-1.5 py-0.5 bg-accent text-accent-foreground rounded">LOCAL</span>
-                        )}
-                        {model.supportsReasoning && (
-                          <span className="text-[10px] px-1.5 py-0.5 bg-primary/20 text-primary rounded">🧠</span>
-                        )}
+              <div className="absolute right-0 top-full mt-1 w-64 bg-popover border border-border rounded-lg shadow-lg z-50 py-1 max-h-80 overflow-auto">
+                {(Object.entries(MODEL_CATEGORIES) as [string, { label: string; description: string }][]).map(([catKey, cat]) => {
+                  const catModels = AI_MODELS.filter(m => m.category === catKey);
+                  if (catModels.length === 0) return null;
+                  return (
+                    <div key={catKey}>
+                      <div className="px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider border-b border-border/50">
+                        {cat.label}
                       </div>
-                      <p className="text-xs text-muted-foreground">{model.provider}</p>
+                      {catModels.map((model) => (
+                        <button
+                          key={model.id}
+                          onClick={() => {
+                            setSelectedModel(model);
+                            setShowModelPicker(false);
+                          }}
+                          className={`w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-secondary/60 transition-colors ${
+                            selectedModel.id === model.id ? "bg-primary/10" : ""
+                          }`}
+                        >
+                          <span className="text-sm">{model.icon}</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <p className="text-sm font-medium text-foreground truncate">{model.name}</p>
+                              {model.isLocal && (
+                                <span className="text-[10px] px-1.5 py-0.5 bg-accent text-accent-foreground rounded">LOCAL</span>
+                              )}
+                              {model.supportsReasoning && (
+                                <span className="text-[10px] px-1.5 py-0.5 bg-primary/20 text-primary rounded">🧠</span>
+                              )}
+                            </div>
+                            <p className="text-xs text-muted-foreground">{model.provider}</p>
+                          </div>
+                          {selectedModel.id === model.id && (
+                            <span className="text-primary text-xs">✓</span>
+                          )}
+                        </button>
+                      ))}
                     </div>
-                    {selectedModel.id === model.id && (
-                      <span className="text-primary text-xs">✓</span>
-                    )}
-                  </button>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

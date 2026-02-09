@@ -16,23 +16,35 @@ interface ChatRequest {
   files?: Record<string, string>;
   model?: string;
   reasoning?: boolean;
+  provider?: "lovable" | "openrouter" | "auto";
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+// Provider config
+const PROVIDERS = {
+  lovable: {
+    url: "https://ai.gateway.lovable.dev/v1/chat/completions",
+    getKey: () => Deno.env.get("LOVABLE_API_KEY"),
+    models: [
+      "google/gemini-3-flash-preview",
+      "google/gemini-3-pro-preview",
+      "google/gemini-2.5-pro",
+      "google/gemini-2.5-flash",
+      "google/gemini-2.5-flash-lite",
+      "openai/gpt-5",
+      "openai/gpt-5-mini",
+      "openai/gpt-5-nano",
+      "openai/gpt-5.2",
+    ],
+  },
+  openrouter: {
+    url: "https://openrouter.ai/api/v1/chat/completions",
+    getKey: () => Deno.env.get("OPENROUTER_API_KEY"),
+    models: [] as string[], // accepts any model
+  },
+};
 
-  try {
-    const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
-    if (!OPENROUTER_API_KEY) {
-      throw new Error("OPENROUTER_API_KEY is not configured");
-    }
-
-    const { messages, files, model, reasoning }: ChatRequest = await req.json();
-
-    // Build system prompt with file context
-    let systemPrompt = `You are an expert AI coding assistant integrated into LovHub, a GitHub-like project manager. You help users edit their code files.
+function buildSystemPrompt(files?: Record<string, string>): string {
+  let systemPrompt = `You are an expert AI coding assistant integrated into LovHub, a GitHub-like project manager. You help users edit their code files.
 
 CAPABILITIES:
 - You can VIEW all files the user has uploaded
@@ -53,15 +65,69 @@ When editing a file, use this format:
 
 CURRENT PROJECT FILES:`;
 
-    if (files && Object.keys(files).length > 0) {
-      for (const [path, content] of Object.entries(files)) {
-        systemPrompt += `\n\n--- ${path} ---\n${content.slice(0, 3000)}${content.length > 3000 ? "\n... (truncated)" : ""}`;
-      }
-    } else {
-      systemPrompt += "\n\n(No files uploaded yet)";
+  if (files && Object.keys(files).length > 0) {
+    for (const [path, content] of Object.entries(files)) {
+      systemPrompt += `\n\n--- ${path} ---\n${content.slice(0, 3000)}${content.length > 3000 ? "\n... (truncated)" : ""}`;
     }
+  } else {
+    systemPrompt += "\n\n(No files uploaded yet)";
+  }
 
-    // Preserve reasoning_details in assistant messages
+  return systemPrompt;
+}
+
+function resolveProvider(model: string, preferredProvider?: string): "lovable" | "openrouter" {
+  if (preferredProvider === "lovable" || preferredProvider === "openrouter") {
+    return preferredProvider;
+  }
+  // Auto: check if model is in Lovable's supported list
+  if (PROVIDERS.lovable.models.includes(model)) {
+    return "lovable";
+  }
+  return "openrouter";
+}
+
+async function callProvider(
+  providerName: "lovable" | "openrouter",
+  body: Record<string, unknown>
+): Promise<Response> {
+  const provider = PROVIDERS[providerName];
+  const apiKey = provider.getKey();
+
+  if (!apiKey) {
+    throw new Error(`${providerName.toUpperCase()} API key is not configured`);
+  }
+
+  const headers: Record<string, string> = {
+    "Authorization": `Bearer ${apiKey}`,
+    "Content-Type": "application/json",
+  };
+
+  if (providerName === "openrouter") {
+    headers["HTTP-Referer"] = "https://lovable.dev";
+    headers["X-Title"] = "LovHub AI Editor";
+  }
+
+  return fetch(provider.url, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+  });
+}
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const { messages, files, model, reasoning, provider: preferredProvider }: ChatRequest = await req.json();
+
+    const selectedModel = model || "google/gemini-3-flash-preview";
+    const primaryProvider = resolveProvider(selectedModel, preferredProvider);
+
+    const systemPrompt = buildSystemPrompt(files);
+
     const apiMessages = [
       { role: "system" as const, content: systemPrompt },
       ...messages.map(m => {
@@ -74,31 +140,33 @@ CURRENT PROJECT FILES:`;
     ];
 
     const body: Record<string, unknown> = {
-      model: model || "openai/gpt-4o-mini",
+      model: selectedModel,
       messages: apiMessages,
       stream: true,
     };
 
-    // Enable reasoning if requested
     if (reasoning) {
       body.reasoning = { enabled: true };
     }
 
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://lovable.dev",
-        "X-Title": "LovHub AI Editor",
-      },
-      body: JSON.stringify(body),
-    });
+    // Try primary provider
+    let response = await callProvider(primaryProvider, body);
+
+    // Fallback: if primary fails and there's an alternative
+    if (!response.ok) {
+      const fallback = primaryProvider === "lovable" ? "openrouter" : "lovable";
+      const fallbackKey = PROVIDERS[fallback].getKey();
+      
+      if (fallbackKey) {
+        console.log(`Primary provider ${primaryProvider} failed (${response.status}), falling back to ${fallback}`);
+        response = await callProvider(fallback, body);
+      }
+    }
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("OpenRouter error:", response.status, errorText);
-      
+      console.error("Provider error:", response.status, errorText);
+
       if (response.status === 429) {
         return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }), {
           status: 429,
@@ -106,13 +174,13 @@ CURRENT PROJECT FILES:`;
         });
       }
       if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "API credits exhausted. Please check your OpenRouter account." }), {
+        return new Response(JSON.stringify({ error: "API credits exhausted. Please check your account." }), {
           status: 402,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      
-      return new Response(JSON.stringify({ error: `OpenRouter API error: ${response.status}` }), {
+
+      return new Response(JSON.stringify({ error: `AI provider error: ${response.status}` }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
