@@ -13,6 +13,7 @@ import { NewProjectPage } from "@/pages/NewProjectPage";
 import { LocalEditorPage } from "@/pages/LocalEditorPage";
 import { RepoDocterPage } from "@/pages/RepoDocterPage";
 import { DeployPage } from "@/pages/DeployPage";
+import { WorkflowPage } from "@/pages/WorkflowPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -35,6 +36,7 @@ function AppRoutes() {
         <Route path="/deploy" element={<DeployPage />} />
         <Route path="/local-editor" element={<LocalEditorPage />} />
         <Route path="/repo-doctor" element={<RepoDocterPage />} />
+        <Route path="/workflow" element={<WorkflowPage />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </AppLayout>
