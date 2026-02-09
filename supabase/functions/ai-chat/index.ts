@@ -7,7 +7,7 @@ const corsHeaders = {
 
 interface Message {
   role: "system" | "user" | "assistant";
-  content: string;
+  content: string | unknown[];
   reasoning_details?: unknown;
 }
 
@@ -17,6 +17,8 @@ interface ChatRequest {
   model?: string;
   reasoning?: boolean;
   provider?: "lovable" | "openrouter" | "auto";
+  images?: string[]; // base64 data URLs
+  pdfNames?: string[];
 }
 
 // Provider config
@@ -121,23 +123,53 @@ serve(async (req) => {
   }
 
   try {
-    const { messages, files, model, reasoning, provider: preferredProvider }: ChatRequest = await req.json();
+    const { messages, files, model, reasoning, provider: preferredProvider, images, pdfNames }: ChatRequest = await req.json();
 
     const selectedModel = model || "google/gemini-3-flash-preview";
     const primaryProvider = resolveProvider(selectedModel, preferredProvider);
 
     const systemPrompt = buildSystemPrompt(files);
 
-    const apiMessages = [
+    // Build messages, injecting images into the last user message if present
+    const apiMessages: Record<string, unknown>[] = [
       { role: "system" as const, content: systemPrompt },
-      ...messages.map(m => {
-        const msg: Record<string, unknown> = { role: m.role, content: m.content };
-        if (m.reasoning_details) {
-          msg.reasoning_details = m.reasoning_details;
-        }
-        return msg;
-      }),
     ];
+
+    for (const m of messages) {
+      const msg: Record<string, unknown> = { role: m.role };
+      if (m.reasoning_details) msg.reasoning_details = m.reasoning_details;
+
+      // Check if this is the last user message and we have images to attach
+      const isLastUserMsg = m === messages[messages.length - 1] && m.role === "user";
+
+      if (isLastUserMsg && images && images.length > 0) {
+        // Multimodal content array
+        const contentParts: unknown[] = [];
+
+        // Add text
+        if (m.content && typeof m.content === "string") {
+          let textContent = m.content;
+          if (pdfNames && pdfNames.length > 0) {
+            textContent += `\n\n[User also uploaded PDFs: ${pdfNames.join(", ")}]`;
+          }
+          contentParts.push({ type: "text", text: textContent });
+        }
+
+        // Add images
+        for (const imgDataUrl of images) {
+          contentParts.push({
+            type: "image_url",
+            image_url: { url: imgDataUrl },
+          });
+        }
+
+        msg.content = contentParts;
+      } else {
+        msg.content = m.content;
+      }
+
+      apiMessages.push(msg);
+    }
 
     const body: Record<string, unknown> = {
       model: selectedModel,
