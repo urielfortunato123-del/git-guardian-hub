@@ -6,7 +6,7 @@ export interface AIModel {
   isLocal?: boolean;
   baseUrl?: string;
   supportsReasoning?: boolean;
-  providerBackend?: "lovable" | "openrouter";
+  providerBackend?: "lovable" | "openrouter" | "huggingface";
   category: "cloud-premium" | "cloud-free" | "local";
 }
 
@@ -30,6 +30,12 @@ export const AI_MODELS: AIModel[] = [
   { id: "meta-llama/llama-3.3-70b-instruct:free", name: "Llama 3.3 70B (Free)", provider: "Meta", icon: "🟣", providerBackend: "openrouter", category: "cloud-free" },
   { id: "meta-llama/llama-3.1-70b-instruct", name: "Llama 3.1 70B", provider: "Meta", icon: "🟣", providerBackend: "openrouter", category: "cloud-free" },
   { id: "deepseek/deepseek-coder", name: "DeepSeek Coder", provider: "DeepSeek", icon: "⚫", providerBackend: "openrouter", category: "cloud-free" },
+
+  // === Hugging Face (needs HUGGINGFACE_API_KEY) ===
+  { id: "Qwen/Qwen2.5-Coder-32B-Instruct", name: "Qwen 2.5 Coder 32B", provider: "Hugging Face", icon: "🤗", providerBackend: "huggingface", category: "cloud-free" },
+  { id: "meta-llama/Llama-3.3-70B-Instruct", name: "Llama 3.3 70B (HF)", provider: "Hugging Face", icon: "🤗", providerBackend: "huggingface", category: "cloud-free" },
+  { id: "mistralai/Mistral-Small-24B-Instruct-2501", name: "Mistral Small 24B", provider: "Hugging Face", icon: "🤗", providerBackend: "huggingface", category: "cloud-free" },
+  { id: "deepseek-ai/DeepSeek-V3-0324", name: "DeepSeek V3", provider: "Hugging Face", icon: "🤗", providerBackend: "huggingface", category: "cloud-free" },
 
   // === Local models ===
   { id: "local/lm-studio", name: "LM Studio", provider: "Local", icon: "🖥️", isLocal: true, baseUrl: "http://localhost:1234/v1", category: "local" },
