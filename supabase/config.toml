@@ -50,3 +50,15 @@ verify_jwt = false
 [functions.github-proxy]
 enabled = true
 verify_jwt = false
+
+[functions.agent-analyze]
+enabled = true
+verify_jwt = false
+
+[functions.agent-plan]
+enabled = true
+verify_jwt = false
+
+[functions.agent-patch]
+enabled = true
+verify_jwt = false

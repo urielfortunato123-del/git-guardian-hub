@@ -1,0 +1,115 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+
+    const { analysis, files, selectedImprovements } = await req.json();
+
+    if (!analysis || !files) {
+      return new Response(JSON.stringify({ error: "Analysis and files are required" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Build file context (only affected files)
+    const affectedPaths = new Set<string>();
+    (selectedImprovements || analysis.improvements || []).forEach((imp: { files?: string[] }) => {
+      imp.files?.forEach((f: string) => affectedPaths.add(f));
+    });
+
+    const fileContext = files
+      .filter((f: { path: string }) => affectedPaths.size === 0 || affectedPaths.has(f.path))
+      .slice(0, 20)
+      .map((f: { path: string; content: string }) => `--- ${f.path} ---\n${f.content.slice(0, 4000)}`)
+      .join("\n\n");
+
+    const systemPrompt = `You are a senior developer creating a step-by-step action plan to improve a codebase.
+Return ONLY valid JSON with this structure:
+
+{
+  "steps": [
+    {
+      "id": 1,
+      "title": "string",
+      "description": "string (what to do and why)",
+      "files": ["file paths to modify"],
+      "type": "refactor | fix | security | performance | feature | docs",
+      "risk": "low | medium | high",
+      "estimatedLines": number
+    }
+  ],
+  "totalEstimatedChanges": number,
+  "rollbackStrategy": "string"
+}
+
+Be specific about what exactly needs to change in each file. Order steps by dependency (do prerequisites first).`;
+
+    const improvements = selectedImprovements || analysis.improvements || [];
+
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-3-flash-preview",
+        messages: [
+          { role: "system", content: systemPrompt },
+          {
+            role: "user",
+            content: `Create an action plan for these improvements:\n${JSON.stringify(improvements, null, 2)}\n\nProject files:\n${fileContext}`,
+          },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      if (response.status === 429) {
+        return new Response(JSON.stringify({ error: "Rate limit exceeded." }), {
+          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (response.status === 402) {
+        return new Response(JSON.stringify({ error: "Credits exhausted." }), {
+          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify({ error: `AI error: ${response.status}` }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content || "";
+
+    let plan;
+    try {
+      const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, content];
+      plan = JSON.parse(jsonMatch[1]!.trim());
+    } catch {
+      plan = { raw: content, error: "Failed to parse plan" };
+    }
+
+    return new Response(JSON.stringify(plan), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+
+  } catch (error) {
+    console.error("Plan error:", error);
+    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }), {
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+});
