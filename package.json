@@ -49,6 +49,8 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "date-fns": "^3.6.0",
+    "electron": "^40.2.1",
+    "electron-builder": "^26.7.0",
     "embla-carousel-react": "^8.6.0",
     "file-saver": "^2.0.5",
     "framer-motion": "^11.15.0",
