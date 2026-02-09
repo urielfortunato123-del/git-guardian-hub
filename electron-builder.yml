@@ -2,6 +2,11 @@ appId: app.lovhub.desktop
 productName: LovHub
 copyright: Copyright © 2025 LovHub
 
+publish:
+  provider: github
+  owner: YOUR_GITHUB_USERNAME
+  repo: YOUR_REPO_NAME
+
 directories:
   output: release
   buildResources: build
@@ -9,7 +14,7 @@ directories:
 files:
   - dist/**/*
   - electron/**/*
-  - public/favicon.ico
+  - public/icon.png
 
 extraResources:
   - from: agent/
