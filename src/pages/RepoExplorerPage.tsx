@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
 import { ChevronRight, ChevronDown, FileCode, Folder, FolderOpen, ArrowLeft, GitBranch } from "lucide-react";
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { mockFileTree, mockFileContents, type FileNode } from "@/data/mockData";
 import { AIChat } from "@/components/AIChat";
 import { LiveCodePreview } from "@/components/LiveCodePreview";
@@ -81,8 +82,8 @@ export function RepoExplorerPage() {
 
   return (
     <div className="flex h-full">
-      {/* File tree sidebar */}
-      <div className="w-64 border-r border-border bg-sidebar flex flex-col">
+      {/* File tree sidebar - fixed width */}
+      <div className="w-64 flex-shrink-0 border-r border-border bg-sidebar flex flex-col">
         <div className="h-12 flex items-center gap-2 px-4 border-b border-sidebar-border">
           <Link to="/dashboard" className="text-muted-foreground hover:text-foreground transition-colors">
             <ArrowLeft className="w-4 h-4" />
@@ -102,15 +103,22 @@ export function RepoExplorerPage() {
         </div>
       </div>
 
-      {/* AI Chat agent - left panel */}
-      <div className="flex-1 flex flex-col min-h-0 border-r border-border">
-        <AIChat files={files} onFileUpdate={handleFileUpdate} />
-      </div>
+      {/* Resizable chat + preview */}
+      <ResizablePanelGroup direction="horizontal" className="flex-1">
+        <ResizablePanel defaultSize={55} minSize={30}>
+          <div className="h-full flex flex-col min-h-0">
+            <AIChat files={files} onFileUpdate={handleFileUpdate} />
+          </div>
+        </ResizablePanel>
 
-      {/* Live code preview - right panel */}
-      <div className="w-[45%] flex flex-col min-h-0 bg-background">
-        <LiveCodePreview files={generatedFiles} onApplyAll={handleApplyAll} />
-      </div>
+        <ResizableHandle withHandle />
+
+        <ResizablePanel defaultSize={45} minSize={20}>
+          <div className="h-full flex flex-col min-h-0 bg-background">
+            <LiveCodePreview files={generatedFiles} onApplyAll={handleApplyAll} />
+          </div>
+        </ResizablePanel>
+      </ResizablePanelGroup>
     </div>
   );
 }
