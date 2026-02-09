@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { GitBranch, FolderGit2, Plus, Rocket, LayoutDashboard, LogOut, Settings, Sparkles } from "lucide-react";
+import { GitBranch, FolderGit2, Plus, Rocket, LayoutDashboard, LogOut, Settings, Sparkles, Stethoscope } from "lucide-react";
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -11,6 +11,7 @@ interface AppLayoutProps {
 const navItems = [
   { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { path: "/local-editor", label: "AI Editor", icon: Sparkles },
+  { path: "/repo-doctor", label: "Repo Doctor", icon: Stethoscope },
   { path: "/new", label: "Novo Projeto", icon: Plus },
   { path: "/deploy", label: "Deploy", icon: Rocket },
 ];

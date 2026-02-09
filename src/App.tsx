@@ -11,6 +11,7 @@ import { RepoExplorerPage } from "@/pages/RepoExplorerPage";
 import { EditorPage } from "@/pages/EditorPage";
 import { NewProjectPage } from "@/pages/NewProjectPage";
 import { LocalEditorPage } from "@/pages/LocalEditorPage";
+import { RepoDocterPage } from "@/pages/RepoDocterPage";
 import { DeployPage } from "@/pages/DeployPage";
 import NotFound from "./pages/NotFound";
 
@@ -33,6 +34,7 @@ function AppRoutes() {
         <Route path="/new" element={<NewProjectPage />} />
         <Route path="/deploy" element={<DeployPage />} />
         <Route path="/local-editor" element={<LocalEditorPage />} />
+        <Route path="/repo-doctor" element={<RepoDocterPage />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </AppLayout>
