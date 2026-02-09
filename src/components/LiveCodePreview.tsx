@@ -1,13 +1,14 @@
 import { useState } from "react";
-import { FileCode, Download, Smartphone, X, Copy, Check } from "lucide-react";
+import { FileCode, Download, Smartphone, X, Copy, Check, CheckCheck } from "lucide-react";
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
 
 interface LiveCodePreviewProps {
   files: Record<string, string>;
+  onApplyAll?: (files: Record<string, string>) => void;
 }
 
-export function LiveCodePreview({ files }: LiveCodePreviewProps) {
+export function LiveCodePreview({ files, onApplyAll }: LiveCodePreviewProps) {
   const [activeFile, setActiveFile] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -106,13 +107,24 @@ cd android
       {/* Header with export */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-secondary/30">
         <span className="text-xs font-semibold text-foreground">{filePaths.length} arquivo(s) gerado(s)</span>
-        <button
-          onClick={exportAsAndroidZip}
-          className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-opacity"
-        >
-          <Smartphone className="w-3.5 h-3.5" />
-          Exportar Android
-        </button>
+        <div className="flex items-center gap-1.5">
+          {onApplyAll && (
+            <button
+              onClick={() => onApplyAll(files)}
+              className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 bg-accent text-accent-foreground rounded-md hover:opacity-90 transition-opacity"
+            >
+              <CheckCheck className="w-3.5 h-3.5" />
+              Aplicar Tudo
+            </button>
+          )}
+          <button
+            onClick={exportAsAndroidZip}
+            className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-opacity"
+          >
+            <Smartphone className="w-3.5 h-3.5" />
+            Exportar Android
+          </button>
+        </div>
       </div>
 
       {/* File tabs */}
