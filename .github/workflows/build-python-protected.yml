@@ -1,0 +1,146 @@
+name: Build Protected Python Agent
+
+on:
+  push:
+    tags:
+      - 'agent-v*'
+  workflow_dispatch:
+    inputs:
+      target_os:
+        description: 'Target OS'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - linux
+          - windows
+
+permissions:
+  contents: write
+
+env:
+  PYTHON_VERSION: "3.11"
+  ENTRY_FILE: "agent.py"
+  APP_NAME: "lovhub-agent"
+
+jobs:
+  build-linux:
+    if: ${{ github.event.inputs.target_os == 'all' || github.event.inputs.target_os == 'linux' || startsWith(github.ref, 'refs/tags/') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        working-directory: agent
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyarmor nuitka ordered-set
+
+      - name: Obfuscate with PyArmor
+        working-directory: agent
+        run: |
+          pyarmor gen \
+            --output dist-obf \
+            --restrict 2 \
+            --mix-str \
+            ${{ env.ENTRY_FILE }}
+
+      - name: Compile with Nuitka
+        working-directory: agent
+        run: |
+          python -m nuitka \
+            --standalone \
+            --onefile \
+            --output-filename=${{ env.APP_NAME }} \
+            --include-data-dir=dist-obf=. \
+            --assume-yes-for-downloads \
+            --remove-output \
+            dist-obf/${{ env.ENTRY_FILE }}
+
+      - name: Prepare artifact
+        working-directory: agent
+        run: |
+          mkdir -p release
+          mv ${{ env.APP_NAME }}.bin release/${{ env.APP_NAME }}-linux-x64 2>/dev/null || \
+          mv ${{ env.APP_NAME }} release/${{ env.APP_NAME }}-linux-x64 2>/dev/null || true
+          chmod +x release/${{ env.APP_NAME }}-linux-x64
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-linux-x64
+          path: agent/release/
+          retention-days: 30
+
+      - name: Upload to Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: agent/release/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-windows:
+    if: ${{ github.event.inputs.target_os == 'all' || github.event.inputs.target_os == 'windows' || startsWith(github.ref, 'refs/tags/') }}
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        working-directory: agent
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyarmor nuitka ordered-set
+
+      - name: Obfuscate with PyArmor
+        working-directory: agent
+        run: |
+          pyarmor gen --output dist-obf --restrict 2 --mix-str ${{ env.ENTRY_FILE }}
+
+      - name: Compile with Nuitka
+        working-directory: agent
+        run: |
+          python -m nuitka `
+            --standalone `
+            --onefile `
+            --output-filename=${{ env.APP_NAME }}.exe `
+            --include-data-dir=dist-obf=. `
+            --assume-yes-for-downloads `
+            --remove-output `
+            --windows-disable-console `
+            dist-obf/${{ env.ENTRY_FILE }}
+
+      - name: Prepare artifact
+        working-directory: agent
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release
+          Move-Item "${{ env.APP_NAME }}.exe" "release/${{ env.APP_NAME }}-win-x64.exe" -ErrorAction SilentlyContinue
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-windows-x64
+          path: agent/release/
+          retention-days: 30
+
+      - name: Upload to Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: agent/release/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
