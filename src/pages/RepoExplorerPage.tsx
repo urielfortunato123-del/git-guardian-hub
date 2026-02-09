@@ -75,6 +75,10 @@ export function RepoExplorerPage() {
     setGeneratedFiles(prev => ({ ...prev, [path]: content }));
   }, []);
 
+  const handleApplyAll = useCallback((genFiles: Record<string, string>) => {
+    setFileContents(prev => ({ ...prev, ...genFiles }));
+  }, []);
+
   return (
     <div className="flex h-full">
       {/* File tree sidebar */}
@@ -105,8 +109,9 @@ export function RepoExplorerPage() {
 
       {/* Live code preview - right panel */}
       <div className="w-[45%] flex flex-col min-h-0 bg-background">
-        <LiveCodePreview files={generatedFiles} />
+        <LiveCodePreview files={generatedFiles} onApplyAll={handleApplyAll} />
       </div>
     </div>
   );
 }
+

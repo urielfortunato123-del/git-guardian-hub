@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Bot, User, Loader2, Sparkles, ChevronDown, Brain, Paperclip, X, Image, FileText, FolderUp } from "lucide-react";
+import { Send, Bot, User, Loader2, Sparkles, ChevronDown, Brain, Paperclip, X, Image, FileText, FolderUp, Archive } from "lucide-react";
+import JSZip from "jszip";
 import ReactMarkdown from "react-markdown";
 import type { UploadedFile } from "@/lib/fileUtils";
 import { getLanguageFromPath } from "@/lib/fileUtils";
@@ -60,11 +61,13 @@ export function AIChat({ files, onFileUpdate }: AIChatProps) {
   const [reasoningEnabled, setReasoningEnabled] = useState(true);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const modelPickerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const attachMenuRef = useRef<HTMLDivElement>(null);
+  const dragCounterRef = useRef(0);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -81,9 +84,37 @@ export function AIChat({ files, onFileUpdate }: AIChatProps) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  const processZipFile = useCallback(async (file: File) => {
+    const zip = await JSZip.loadAsync(file);
+    const newAttachments: Attachment[] = [];
+    const entries = Object.entries(zip.files);
+    for (const [path, zipEntry] of entries) {
+      if (zipEntry.dir) continue;
+      if (/node_modules|\.git|dist|build|\.next|vendor/.test(path)) continue;
+      if (IMAGE_EXTS.test(path)) {
+        const blob = await zipEntry.async("blob");
+        const dataUrl = await readFileAsDataURL(new File([blob], path.split("/").pop() || path));
+        newAttachments.push({ id: crypto.randomUUID(), name: path, type: "image", data: dataUrl, preview: dataUrl });
+      } else if (TEXT_EXTS.test(path) || !(/\.(exe|dll|so|dylib|bin|iso|img|dmg|class|o|a|woff2?|ttf|eot|ico|mp[34]|wav|avi|mov|zip|rar|7z|tar|gz)$/i.test(path))) {
+        try {
+          const text = await zipEntry.async("string");
+          if (text && !text.includes("\0") && text.length < 200_000) {
+            newAttachments.push({ id: crypto.randomUUID(), name: path, type: "text", data: text });
+          }
+        } catch { /* skip binary */ }
+      }
+    }
+    setAttachments(prev => [...prev, ...newAttachments]);
+  }, []);
+
   const processFiles = useCallback(async (fileList: FileList) => {
     const newAttachments: Attachment[] = [];
     for (const file of Array.from(fileList)) {
+      // Handle ZIP files
+      if (file.name.endsWith(".zip") || file.type === "application/zip" || file.type === "application/x-zip-compressed") {
+        await processZipFile(file);
+        continue;
+      }
       const id = crypto.randomUUID();
       if (IMAGE_EXTS.test(file.name) || file.type.startsWith("image/")) {
         const dataUrl = await readFileAsDataURL(file);
@@ -95,7 +126,6 @@ export function AIChat({ files, onFileUpdate }: AIChatProps) {
         const text = await readFileAsText(file);
         newAttachments.push({ id, name: file.name, type: "text", data: text });
       } else {
-        // Try reading as text
         try {
           const text = await readFileAsText(file);
           if (text && !text.includes("\0")) {
@@ -105,7 +135,7 @@ export function AIChat({ files, onFileUpdate }: AIChatProps) {
       }
     }
     setAttachments(prev => [...prev, ...newAttachments]);
-  }, []);
+  }, [processZipFile]);
 
   const processFolderFiles = useCallback(async (fileList: FileList) => {
     const newAttachments: Attachment[] = [];
@@ -328,10 +358,60 @@ CURRENT PROJECT FILES:`;
     }
   };
 
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current++;
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      setIsDragging(true);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current--;
+    if (dragCounterRef.current === 0) {
+      setIsDragging(false);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    dragCounterRef.current = 0;
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      processFiles(e.dataTransfer.files);
+    }
+  };
+
   return (
-    <div className="flex flex-col h-full">
+    <div
+      className="flex flex-col h-full relative"
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
+      {/* Drag overlay */}
+      {isDragging && (
+        <div className="absolute inset-0 z-50 bg-primary/10 border-2 border-dashed border-primary rounded-lg flex items-center justify-center backdrop-blur-sm">
+          <div className="text-center">
+            <Archive className="w-12 h-12 text-primary mx-auto mb-2" />
+            <p className="text-sm font-semibold text-primary">Solte arquivos aqui</p>
+            <p className="text-xs text-muted-foreground mt-1">Imagens, código, ZIP, PDF...</p>
+          </div>
+        </div>
+      )}
+
       {/* Hidden file inputs */}
-      <input ref={fileInputRef} type="file" multiple accept="image/*,.pdf,.txt,.md,.json,.ts,.tsx,.js,.jsx,.py,.html,.css,.xml,.yaml,.yml,.toml,.sh,.sql,.go,.rs,.java,.kt,.swift,.c,.cpp,.h,.cs,.php,.rb,.scss,.less,.graphql,.proto" className="hidden" onChange={e => { if (e.target.files) processFiles(e.target.files); e.target.value = ""; }} />
+      <input ref={fileInputRef} type="file" multiple accept="image/*,.pdf,.zip,.txt,.md,.json,.ts,.tsx,.js,.jsx,.py,.html,.css,.xml,.yaml,.yml,.toml,.sh,.sql,.go,.rs,.java,.kt,.swift,.c,.cpp,.h,.cs,.php,.rb,.scss,.less,.graphql,.proto" className="hidden" onChange={e => { if (e.target.files) processFiles(e.target.files); e.target.value = ""; }} />
       <input ref={folderInputRef} type="file" multiple {...{ webkitdirectory: "", directory: "" } as any} className="hidden" onChange={e => { if (e.target.files) processFolderFiles(e.target.files); e.target.value = ""; }} />
 
       {/* Header */}
