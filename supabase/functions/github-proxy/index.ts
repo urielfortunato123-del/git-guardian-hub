@@ -119,11 +119,57 @@ serve(async (req) => {
         const r = await fetch(url, { headers: ghHeaders });
         if (!r.ok) throw new Error(`Failed to fetch file: ${r.status}`);
         const data = await r.json();
-        // Decode base64 content
         if (data.content) {
           data.decoded_content = atob(data.content.replace(/\n/g, ""));
         }
         result = data;
+        break;
+      }
+
+      case "tree": {
+        const { owner, repo, ref } = params;
+        const branch = ref || "HEAD";
+        const r = await fetch(
+          `${GITHUB_API}/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`,
+          { headers: ghHeaders }
+        );
+        if (!r.ok) throw new Error(`Failed to fetch tree: ${r.status}`);
+        const data = await r.json();
+        // Return only blobs (files), skip trees (dirs)
+        result = (data.tree || [])
+          .filter((item: { type: string }) => item.type === "blob")
+          .map((item: { path: string; size: number; sha: string }) => ({
+            path: item.path,
+            size: item.size,
+            sha: item.sha,
+          }));
+        break;
+      }
+
+      case "download_files": {
+        // Download multiple files' content in batch (max 50 per call)
+        const { owner, repo, paths, ref } = params;
+        const filePaths: string[] = (paths || []).slice(0, 50);
+        const results: { path: string; content: string }[] = [];
+
+        for (const filePath of filePaths) {
+          try {
+            let url = `${GITHUB_API}/repos/${owner}/${repo}/contents/${filePath}`;
+            if (ref) url += `?ref=${ref}`;
+            const r = await fetch(url, { headers: ghHeaders });
+            if (!r.ok) continue;
+            const fileData = await r.json();
+            if (fileData.content) {
+              results.push({
+                path: filePath,
+                content: atob(fileData.content.replace(/\n/g, "")),
+              });
+            }
+          } catch {
+            // Skip files that fail
+          }
+        }
+        result = results;
         break;
       }
 

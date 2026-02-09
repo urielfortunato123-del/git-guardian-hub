@@ -4,11 +4,12 @@ import {
   ArrowLeft, ArrowRight, Loader2, Shield, Zap, AlertTriangle,
   CheckCircle2, FileCode, GitBranch, Play, RotateCcw,
   ChevronDown, ChevronRight, Upload, Search, Github,
-  BarChart3, Lock, Bug, Sparkles, Package
+  BarChart3, Lock, Bug, Sparkles, Package, Download
 } from "lucide-react";
 import { FolderUpload } from "@/components/FolderUpload";
 import { useAgentWorkflow, type Improvement, type PlanStep } from "@/hooks/useAgentWorkflow";
 import type { UploadedFile } from "@/lib/fileUtils";
+import { getLanguageFromPath } from "@/lib/fileUtils";
 import { useGitHub } from "@/hooks/useGitHub";
 import ReactMarkdown from "react-markdown";
 
@@ -46,6 +47,8 @@ function ScoreBar({ score, label }: { score: number; label: string }) {
 export function WorkflowPage() {
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [source, setSource] = useState<"local" | "github" | null>(null);
+  const [cloning, setCloning] = useState<string | null>(null);
+  const [cloneProgress, setCloneProgress] = useState("");
   const workflow = useAgentWorkflow();
   const github = useGitHub();
 
@@ -109,19 +112,64 @@ export function WorkflowPage() {
             </p>
             {github.isConnected ? (
               <div className="space-y-2 max-h-48 overflow-auto">
-                {github.repos.slice(0, 10).map(repo => (
+                {github.repos.slice(0, 15).map(repo => (
                   <button
                     key={repo.id}
-                    className="w-full text-left px-3 py-2 rounded-lg bg-secondary/50 hover:bg-secondary text-sm text-foreground transition-colors"
+                    disabled={!!cloning}
+                    className="w-full text-left px-3 py-2 rounded-lg bg-secondary/50 hover:bg-secondary text-sm text-foreground transition-colors disabled:opacity-50 flex items-center justify-between"
                     onClick={async () => {
-                      // TODO: fetch repo files via github proxy
-                      alert(`Funcionalidade em desenvolvimento: clonar ${repo.full_name}`);
+                      setCloning(repo.full_name);
+                      setCloneProgress("Buscando árvore de arquivos...");
+                      try {
+                        const tree: { path: string; size: number }[] = await github.callGitHub("tree", {
+                          owner: repo.owner.login, repo: repo.name, ref: repo.default_branch,
+                        });
+                        const skipPatterns = [
+                          /node_modules\//,/\.git\//,/dist\//,/build\//,/\.next\//,/vendor\//,
+                          /\.png$/i,/\.jpg$/i,/\.jpeg$/i,/\.gif$/i,/\.ico$/i,/\.svg$/i,
+                          /\.woff/i,/\.ttf$/i,/\.eot$/i,/\.mp3$/i,/\.mp4$/i,
+                          /\.pdf$/i,/\.zip$/i,/\.tar$/i,/\.gz$/i,/\.lock$/,/\.DS_Store/,
+                        ];
+                        const textFiles = tree.filter((f: { path: string; size: number }) =>
+                          f.size < 200_000 && !skipPatterns.some(p => p.test(f.path))
+                        );
+                        const allFiles: UploadedFile[] = [];
+                        const batchSize = 30;
+                        for (let i = 0; i < textFiles.length; i += batchSize) {
+                          const batch = textFiles.slice(i, i + batchSize);
+                          setCloneProgress(`Baixando ${Math.min(i + batchSize, textFiles.length)}/${textFiles.length} arquivos...`);
+                          const downloaded: { path: string; content: string }[] = await github.callGitHub("download_files", {
+                            owner: repo.owner.login, repo: repo.name,
+                            paths: batch.map((f: { path: string }) => f.path), ref: repo.default_branch,
+                          });
+                          for (const f of downloaded) {
+                            allFiles.push({ path: f.path, content: f.content, language: getLanguageFromPath(f.path) });
+                          }
+                        }
+                        setFiles(allFiles);
+                        setSource("github");
+                        setCloneProgress("");
+                      } catch (e) {
+                        setCloneProgress(`Erro: ${e instanceof Error ? e.message : "falha ao clonar"}`);
+                      } finally {
+                        setCloning(null);
+                      }
                     }}
                   >
-                    <span className="font-medium">{repo.full_name}</span>
-                    <span className="text-xs text-muted-foreground ml-2">{repo.language}</span>
+                    <div>
+                      <span className="font-medium">{repo.name}</span>
+                      <span className="text-xs text-muted-foreground ml-2">{repo.language}</span>
+                    </div>
+                    {cloning === repo.full_name ? (
+                      <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                    ) : (
+                      <Download className="w-3.5 h-3.5 text-muted-foreground" />
+                    )}
                   </button>
                 ))}
+                {cloneProgress && (
+                  <p className="text-xs text-primary px-1 pt-1">{cloneProgress}</p>
+                )}
               </div>
             ) : (
               <Link
