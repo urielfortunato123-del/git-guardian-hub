@@ -27,6 +27,7 @@ export const AI_MODELS: AIModel[] = [
   { id: "openai/gpt-oss-20b:free", name: "GPT-OSS 20B (Free)", provider: "OpenAI", icon: "🆓", supportsReasoning: true, providerBackend: "openrouter", category: "cloud-free" },
   { id: "anthropic/claude-3.5-sonnet", name: "Claude 3.5 Sonnet", provider: "Anthropic", icon: "🟠", providerBackend: "openrouter", category: "cloud-premium" },
   { id: "anthropic/claude-3-opus", name: "Claude 3 Opus", provider: "Anthropic", icon: "🟠", providerBackend: "openrouter", category: "cloud-premium" },
+  { id: "meta-llama/llama-3.3-70b-instruct:free", name: "Llama 3.3 70B (Free)", provider: "Meta", icon: "🟣", providerBackend: "openrouter", category: "cloud-free" },
   { id: "meta-llama/llama-3.1-70b-instruct", name: "Llama 3.1 70B", provider: "Meta", icon: "🟣", providerBackend: "openrouter", category: "cloud-free" },
   { id: "deepseek/deepseek-coder", name: "DeepSeek Coder", provider: "DeepSeek", icon: "⚫", providerBackend: "openrouter", category: "cloud-free" },
 
