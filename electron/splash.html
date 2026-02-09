@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>LovHub</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #09090b;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      -webkit-app-region: drag;
+    }
+
+    .splash {
+      text-align: center;
+      animation: fadeIn 0.6s ease-out;
+    }
+
+    /* Infinity icon glow */
+    .logo-container {
+      width: 120px;
+      height: 120px;
+      margin: 0 auto 32px;
+      position: relative;
+    }
+
+    .logo-container img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      animation: pulse 2s ease-in-out infinite;
+      filter: drop-shadow(0 0 24px rgba(59, 130, 246, 0.5));
+    }
+
+    .logo-ring {
+      position: absolute;
+      inset: -8px;
+      border-radius: 50%;
+      border: 2px solid rgba(59, 130, 246, 0.15);
+      animation: ringPulse 2s ease-in-out infinite;
+    }
+
+    .logo-ring:nth-child(2) {
+      inset: -18px;
+      border-color: rgba(59, 130, 246, 0.08);
+      animation-delay: 0.4s;
+    }
+
+    h1 {
+      font-size: 28px;
+      font-weight: 700;
+      color: #fafafa;
+      letter-spacing: -0.5px;
+      margin-bottom: 6px;
+    }
+
+    .subtitle {
+      font-size: 13px;
+      color: #71717a;
+      margin-bottom: 40px;
+    }
+
+    /* Progress bar */
+    .progress-track {
+      width: 200px;
+      height: 3px;
+      background: rgba(255,255,255,0.06);
+      border-radius: 3px;
+      margin: 0 auto 16px;
+      overflow: hidden;
+    }
+
+    .progress-bar {
+      height: 100%;
+      width: 30%;
+      background: linear-gradient(90deg, #3b82f6, #60a5fa);
+      border-radius: 3px;
+      animation: progressSlide 1.8s ease-in-out infinite;
+      box-shadow: 0 0 12px rgba(59, 130, 246, 0.4);
+    }
+
+    .status {
+      font-size: 11px;
+      color: #52525b;
+      letter-spacing: 0.5px;
+    }
+
+    .version {
+      position: fixed;
+      bottom: 16px;
+      right: 20px;
+      font-size: 10px;
+      color: #3f3f46;
+    }
+
+    .credit {
+      position: fixed;
+      bottom: 16px;
+      left: 20px;
+      font-size: 10px;
+      color: #3f3f46;
+    }
+
+    /* Ambient particles */
+    .particles {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      overflow: hidden;
+    }
+
+    .particle {
+      position: absolute;
+      width: 2px;
+      height: 2px;
+      background: rgba(59, 130, 246, 0.3);
+      border-radius: 50%;
+      animation: float linear infinite;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(16px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.04); }
+    }
+
+    @keyframes ringPulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.08); opacity: 0.5; }
+    }
+
+    @keyframes progressSlide {
+      0% { transform: translateX(-100%); }
+      50% { transform: translateX(350%); }
+      100% { transform: translateX(-100%); }
+    }
+
+    @keyframes float {
+      from { transform: translateY(100vh) rotate(0deg); opacity: 0; }
+      10% { opacity: 1; }
+      90% { opacity: 1; }
+      to { transform: translateY(-10vh) rotate(360deg); opacity: 0; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Ambient particles -->
+  <div class="particles" id="particles"></div>
+
+  <div class="splash">
+    <div class="logo-container">
+      <div class="logo-ring"></div>
+      <div class="logo-ring"></div>
+      <img src="icon.png" alt="LovHub" />
+    </div>
+    <h1>LovHub</h1>
+    <p class="subtitle">AI Dev Platform</p>
+    <div class="progress-track">
+      <div class="progress-bar"></div>
+    </div>
+    <p class="status" id="status">Iniciando...</p>
+  </div>
+
+  <span class="credit">Desenvolvido por Uriel da Fonseca Fortunato</span>
+  <span class="version" id="version"></span>
+
+  <script>
+    // Generate particles
+    const container = document.getElementById('particles');
+    for (let i = 0; i < 20; i++) {
+      const p = document.createElement('div');
+      p.className = 'particle';
+      p.style.left = Math.random() * 100 + '%';
+      p.style.animationDuration = (6 + Math.random() * 10) + 's';
+      p.style.animationDelay = (Math.random() * 8) + 's';
+      p.style.width = p.style.height = (1 + Math.random() * 2) + 'px';
+      container.appendChild(p);
+    }
+
+    // Status messages
+    const messages = [
+      'Iniciando...',
+      'Carregando módulos...',
+      'Conectando serviços...',
+      'Preparando interface...',
+      'Quase pronto...'
+    ];
+    let idx = 0;
+    const statusEl = document.getElementById('status');
+    setInterval(() => {
+      idx = Math.min(idx + 1, messages.length - 1);
+      statusEl.textContent = messages[idx];
+    }, 800);
+  </script>
+</body>
+</html>
