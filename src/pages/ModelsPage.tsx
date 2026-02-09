@@ -64,10 +64,17 @@ function LocalSetupGuide() {
   const [newUrl, setNewUrl] = useState("http://localhost:");
   const [copied, setCopied] = useState<string | null>(null);
 
+  const normalizeUrl = (url: string): string => {
+    let u = url.trim().replace(/\/+$/, "");
+    if (!u.endsWith("/v1")) u += "/v1";
+    return u;
+  };
+
   const addEndpoint = () => {
     if (!newName.trim() || !newUrl.trim()) return;
     const id = newName.toLowerCase().replace(/[^a-z0-9]/g, "_");
-    const updated = [...endpoints, { id, name: newName.trim(), url: newUrl.trim() }];
+    const url = normalizeUrl(newUrl);
+    const updated = [...endpoints, { id, name: newName.trim(), url }];
     setEndpoints(updated);
     saveLocalEndpoints(updated);
     setNewName("");
