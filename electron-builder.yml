@@ -23,7 +23,7 @@ win:
     - target: nsis
       arch:
         - x64
-  icon: public/favicon.ico
+  icon: public/icon.png
   artifactName: LovHub-Setup-${version}-win.${ext}
 
 nsis:
@@ -38,7 +38,7 @@ mac:
       arch:
         - x64
         - arm64
-  icon: public/favicon.ico
+  icon: public/icon.png
   artifactName: LovHub-${version}-mac-${arch}.${ext}
   category: public.app-category.developer-tools
 
@@ -50,7 +50,7 @@ linux:
     - target: deb
       arch:
         - x64
-  icon: public/favicon.ico
+  icon: public/icon.png
   artifactName: LovHub-${version}-linux-${arch}.${ext}
   category: Development
   maintainer: LovHub
