@@ -43,7 +43,31 @@ jobs:
           pip install -r requirements.txt
           pip install pyarmor nuitka ordered-set
 
-      - name: Obfuscate with PyArmor
+      - name: Register PyArmor Pro License
+        if: ${{ env.PYARMOR_LICENSE != '' }}
+        working-directory: agent
+        env:
+          PYARMOR_LICENSE: ${{ secrets.PYARMOR_LICENSE }}
+        run: |
+          pyarmor reg "$PYARMOR_LICENSE"
+          echo "PYARMOR_PRO=true" >> $GITHUB_ENV
+
+      - name: Obfuscate with PyArmor (Pro)
+        if: ${{ env.PYARMOR_PRO == 'true' }}
+        working-directory: agent
+        run: |
+          pyarmor gen \
+            --output dist-obf \
+            --restrict 2 \
+            --enable-jit \
+            --mix-str \
+            --assert-call \
+            --assert-import \
+            --private \
+            ${{ env.ENTRY_FILE }}
+
+      - name: Obfuscate with PyArmor (Free)
+        if: ${{ env.PYARMOR_PRO != 'true' }}
         working-directory: agent
         run: |
           pyarmor gen \
@@ -105,7 +129,24 @@ jobs:
           pip install -r requirements.txt
           pip install pyarmor nuitka ordered-set
 
-      - name: Obfuscate with PyArmor
+      - name: Register PyArmor Pro License
+        if: ${{ env.PYARMOR_LICENSE != '' }}
+        working-directory: agent
+        env:
+          PYARMOR_LICENSE: ${{ secrets.PYARMOR_LICENSE }}
+        shell: pwsh
+        run: |
+          pyarmor reg "$env:PYARMOR_LICENSE"
+          echo "PYARMOR_PRO=true" >> $env:GITHUB_ENV
+
+      - name: Obfuscate with PyArmor (Pro)
+        if: ${{ env.PYARMOR_PRO == 'true' }}
+        working-directory: agent
+        run: |
+          pyarmor gen --output dist-obf --restrict 2 --enable-jit --mix-str --assert-call --assert-import --private ${{ env.ENTRY_FILE }}
+
+      - name: Obfuscate with PyArmor (Free)
+        if: ${{ env.PYARMOR_PRO != 'true' }}
         working-directory: agent
         run: |
           pyarmor gen --output dist-obf --restrict 2 --mix-str ${{ env.ENTRY_FILE }}

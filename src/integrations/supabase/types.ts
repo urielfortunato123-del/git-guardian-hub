@@ -14,7 +14,83 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      license_activations: {
+        Row: {
+          activated_at: string
+          hardware_id: string
+          id: string
+          ip_address: string | null
+          is_active: boolean
+          last_seen_at: string
+          license_id: string
+        }
+        Insert: {
+          activated_at?: string
+          hardware_id: string
+          id?: string
+          ip_address?: string | null
+          is_active?: boolean
+          last_seen_at?: string
+          license_id: string
+        }
+        Update: {
+          activated_at?: string
+          hardware_id?: string
+          id?: string
+          ip_address?: string | null
+          is_active?: boolean
+          last_seen_at?: string
+          license_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "license_activations_license_id_fkey"
+            columns: ["license_id"]
+            isOneToOne: false
+            referencedRelation: "licenses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      licenses: {
+        Row: {
+          created_at: string
+          current_activations: number
+          expires_at: string | null
+          hardware_id: string | null
+          id: string
+          is_active: boolean
+          last_heartbeat_at: string | null
+          license_key: string
+          max_activations: number
+          user_email: string | null
+        }
+        Insert: {
+          created_at?: string
+          current_activations?: number
+          expires_at?: string | null
+          hardware_id?: string | null
+          id?: string
+          is_active?: boolean
+          last_heartbeat_at?: string | null
+          license_key: string
+          max_activations?: number
+          user_email?: string | null
+        }
+        Update: {
+          created_at?: string
+          current_activations?: number
+          expires_at?: string | null
+          hardware_id?: string | null
+          id?: string
+          is_active?: boolean
+          last_heartbeat_at?: string | null
+          license_key?: string
+          max_activations?: number
+          user_email?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
