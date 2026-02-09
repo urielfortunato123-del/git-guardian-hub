@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Send, Bot, User, Loader2, Sparkles, ChevronDown } from "lucide-react";
+import { Send, Bot, User, Loader2, Sparkles, ChevronDown, Brain } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import type { UploadedFile } from "@/lib/fileUtils";
 import { ProjectAnalysis } from "@/components/ProjectAnalysis";
@@ -7,6 +7,8 @@ import { ProjectAnalysis } from "@/components/ProjectAnalysis";
 interface Message {
   role: "user" | "assistant";
   content: string;
+  reasoning_details?: unknown;
+  reasoning_content?: string;
 }
 
 interface AIChatProps {
@@ -21,12 +23,15 @@ interface AIModel {
   icon: string;
   isLocal?: boolean;
   baseUrl?: string;
+  supportsReasoning?: boolean;
 }
 
 const AI_MODELS: AIModel[] = [
   // Local models
   { id: "local/lm-studio", name: "LM Studio", provider: "Local", icon: "🖥️", isLocal: true, baseUrl: "http://localhost:1234/v1" },
   { id: "local/ollama", name: "Ollama", provider: "Local", icon: "🦙", isLocal: true, baseUrl: "http://localhost:11434/v1" },
+  // Free models with reasoning
+  { id: "openai/gpt-oss-20b:free", name: "GPT-OSS 20B (Free)", provider: "OpenAI", icon: "🆓", supportsReasoning: true },
   // Cloud models via OpenRouter
   { id: "openai/gpt-4o-mini", name: "GPT-4o Mini", provider: "OpenAI", icon: "🟢" },
   { id: "openai/gpt-4o", name: "GPT-4o", provider: "OpenAI", icon: "🟢" },
@@ -43,8 +48,9 @@ export function AIChat({ files, onFileUpdate }: AIChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedModel, setSelectedModel] = useState(AI_MODELS[0]);
+  const [selectedModel, setSelectedModel] = useState(AI_MODELS[2]); // GPT-OSS free by default
   const [showModelPicker, setShowModelPicker] = useState(false);
+  const [reasoningEnabled, setReasoningEnabled] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const modelPickerRef = useRef<HTMLDivElement>(null);
 
@@ -56,7 +62,6 @@ export function AIChat({ files, onFileUpdate }: AIChatProps) {
     scrollToBottom();
   }, [messages]);
 
-  // Close model picker when clicking outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (modelPickerRef.current && !modelPickerRef.current.contains(e.target as Node)) {
@@ -70,7 +75,6 @@ export function AIChat({ files, onFileUpdate }: AIChatProps) {
   const parseFileEdits = (content: string) => {
     const regex = /```filepath:([^\n]+)\n([\s\S]*?)```/g;
     let match;
-    
     while ((match = regex.exec(content)) !== null) {
       const path = match[1].trim();
       const fileContent = match[2];
@@ -126,12 +130,9 @@ CURRENT PROJECT FILES:`;
       let response: Response;
 
       if (selectedModel.isLocal && selectedModel.baseUrl) {
-        // Direct call to local model (LM Studio, Ollama)
         response = await fetch(`${selectedModel.baseUrl}/chat/completions`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             model: "local-model",
             messages: [
@@ -143,7 +144,15 @@ CURRENT PROJECT FILES:`;
           }),
         });
       } else {
-        // Cloud model via edge function
+        // Cloud model via edge function — pass reasoning_details for multi-turn reasoning
+        const apiMessages = [...messages, userMessage].map(m => {
+          const msg: Record<string, unknown> = { role: m.role, content: m.content };
+          if (m.reasoning_details) {
+            msg.reasoning_details = m.reasoning_details;
+          }
+          return msg;
+        });
+
         response = await fetch(
           `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`,
           {
@@ -153,9 +162,10 @@ CURRENT PROJECT FILES:`;
               Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
             },
             body: JSON.stringify({
-              messages: [...messages, userMessage],
+              messages: apiMessages,
               files: filesObj,
               model: selectedModel.id,
+              reasoning: reasoningEnabled && selectedModel.supportsReasoning,
             }),
           }
         );
@@ -166,13 +176,13 @@ CURRENT PROJECT FILES:`;
         throw new Error(errorData.error || `Error: ${response.status}`);
       }
 
-      if (!response.body) {
-        throw new Error("No response body");
-      }
+      if (!response.body) throw new Error("No response body");
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let assistantContent = "";
+      let reasoningContent = "";
+      let reasoningDetails: unknown = undefined;
       let buffer = "";
 
       setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
@@ -197,18 +207,32 @@ CURRENT PROJECT FILES:`;
 
           try {
             const parsed = JSON.parse(jsonStr);
-            const content = parsed.choices?.[0]?.delta?.content;
-            if (content) {
-              assistantContent += content;
-              setMessages((prev) => {
-                const newMsgs = [...prev];
-                newMsgs[newMsgs.length - 1] = {
-                  role: "assistant",
-                  content: assistantContent,
-                };
-                return newMsgs;
-              });
+            const delta = parsed.choices?.[0]?.delta;
+            
+            if (delta?.content) {
+              assistantContent += delta.content;
             }
+
+            // Capture reasoning content from streaming
+            if (delta?.reasoning_content) {
+              reasoningContent += delta.reasoning_content;
+            }
+
+            // Capture reasoning_details (non-streaming, from final message)
+            if (parsed.choices?.[0]?.message?.reasoning_details) {
+              reasoningDetails = parsed.choices[0].message.reasoning_details;
+            }
+
+            setMessages((prev) => {
+              const newMsgs = [...prev];
+              newMsgs[newMsgs.length - 1] = {
+                role: "assistant",
+                content: assistantContent,
+                reasoning_content: reasoningContent || undefined,
+                reasoning_details: reasoningDetails,
+              };
+              return newMsgs;
+            });
           } catch {
             buffer = line + "\n" + buffer;
             break;
@@ -246,47 +270,68 @@ CURRENT PROJECT FILES:`;
           <span className="font-semibold text-foreground">AI Editor</span>
         </div>
         
-        {/* Model Selector */}
-        <div className="relative" ref={modelPickerRef}>
-          <button
-            onClick={() => setShowModelPicker(!showModelPicker)}
-            className="flex items-center gap-1.5 text-xs bg-secondary hover:bg-secondary/80 px-2.5 py-1.5 rounded-md transition-colors"
-          >
-            <span>{selectedModel.icon}</span>
-            <span className="text-foreground font-medium max-w-[100px] truncate">{selectedModel.name}</span>
-            <ChevronDown className="w-3 h-3 text-muted-foreground" />
-          </button>
-          
-          {showModelPicker && (
-            <div className="absolute right-0 top-full mt-1 w-56 bg-popover border border-border rounded-lg shadow-lg z-50 py-1 max-h-72 overflow-auto">
-              {AI_MODELS.map((model) => (
-                <button
-                  key={model.id}
-                  onClick={() => {
-                    setSelectedModel(model);
-                    setShowModelPicker(false);
-                  }}
-                  className={`w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-secondary/60 transition-colors ${
-                    selectedModel.id === model.id ? "bg-primary/10" : ""
-                  }`}
-                >
-                  <span className="text-sm">{model.icon}</span>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <p className="text-sm font-medium text-foreground truncate">{model.name}</p>
-                      {model.isLocal && (
-                        <span className="text-[10px] px-1.5 py-0.5 bg-accent text-accent-foreground rounded">LOCAL</span>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground">{model.provider}</p>
-                  </div>
-                  {selectedModel.id === model.id && (
-                    <span className="text-primary text-xs">✓</span>
-                  )}
-                </button>
-              ))}
-            </div>
+        <div className="flex items-center gap-2">
+          {/* Reasoning toggle */}
+          {selectedModel.supportsReasoning && (
+            <button
+              onClick={() => setReasoningEnabled(!reasoningEnabled)}
+              className={`flex items-center gap-1 text-[10px] px-2 py-1 rounded-md transition-colors ${
+                reasoningEnabled
+                  ? "bg-accent/20 text-accent"
+                  : "bg-secondary text-muted-foreground"
+              }`}
+              title="Habilitar reasoning (cadeia de pensamento)"
+            >
+              <Brain className="w-3 h-3" />
+              Reasoning
+            </button>
           )}
+
+          {/* Model Selector */}
+          <div className="relative" ref={modelPickerRef}>
+            <button
+              onClick={() => setShowModelPicker(!showModelPicker)}
+              className="flex items-center gap-1.5 text-xs bg-secondary hover:bg-secondary/80 px-2.5 py-1.5 rounded-md transition-colors"
+            >
+              <span>{selectedModel.icon}</span>
+              <span className="text-foreground font-medium max-w-[100px] truncate">{selectedModel.name}</span>
+              <ChevronDown className="w-3 h-3 text-muted-foreground" />
+            </button>
+            
+            {showModelPicker && (
+              <div className="absolute right-0 top-full mt-1 w-56 bg-popover border border-border rounded-lg shadow-lg z-50 py-1 max-h-72 overflow-auto">
+                {AI_MODELS.map((model) => (
+                  <button
+                    key={model.id}
+                    onClick={() => {
+                      setSelectedModel(model);
+                      setShowModelPicker(false);
+                    }}
+                    className={`w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-secondary/60 transition-colors ${
+                      selectedModel.id === model.id ? "bg-primary/10" : ""
+                    }`}
+                  >
+                    <span className="text-sm">{model.icon}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-sm font-medium text-foreground truncate">{model.name}</p>
+                        {model.isLocal && (
+                          <span className="text-[10px] px-1.5 py-0.5 bg-accent text-accent-foreground rounded">LOCAL</span>
+                        )}
+                        {model.supportsReasoning && (
+                          <span className="text-[10px] px-1.5 py-0.5 bg-primary/20 text-primary rounded">🧠</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground">{model.provider}</p>
+                    </div>
+                    {selectedModel.id === model.id && (
+                      <span className="text-primary text-xs">✓</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -326,39 +371,46 @@ CURRENT PROJECT FILES:`;
                 <Bot className="w-4 h-4 text-primary" />
               </div>
             )}
-            <div
-              className={`max-w-[80%] rounded-lg px-4 py-2 ${
-                msg.role === "user"
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-card border border-border"
-              }`}
-            >
-              {msg.role === "assistant" ? (
-                <div className="prose prose-sm prose-invert max-w-none text-foreground">
-                  <ReactMarkdown
-                    components={{
-                      code: ({ className, children, ...props }) => {
-                        const isInline = !className;
-                        return isInline ? (
-                          <code className="bg-secondary px-1 py-0.5 rounded text-sm font-mono" {...props}>
-                            {children}
-                          </code>
-                        ) : (
-                          <pre className="bg-editor-bg p-3 rounded-md overflow-x-auto">
-                            <code className="text-sm font-mono" {...props}>
+            <div className={`max-w-[80%] space-y-2`}>
+              {/* Reasoning content (collapsible) */}
+              {msg.role === "assistant" && msg.reasoning_content && (
+                <ReasoningBlock content={msg.reasoning_content} />
+              )}
+
+              <div
+                className={`rounded-lg px-4 py-2 ${
+                  msg.role === "user"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-card border border-border"
+                }`}
+              >
+                {msg.role === "assistant" ? (
+                  <div className="prose prose-sm prose-invert max-w-none text-foreground">
+                    <ReactMarkdown
+                      components={{
+                        code: ({ className, children, ...props }) => {
+                          const isInline = !className;
+                          return isInline ? (
+                            <code className="bg-secondary px-1 py-0.5 rounded text-sm font-mono" {...props}>
                               {children}
                             </code>
-                          </pre>
-                        );
-                      },
-                    }}
-                  >
-                    {msg.content || "..."}
-                  </ReactMarkdown>
-                </div>
-              ) : (
-                <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
-              )}
+                          ) : (
+                            <pre className="bg-editor-bg p-3 rounded-md overflow-x-auto">
+                              <code className="text-sm font-mono" {...props}>
+                                {children}
+                              </code>
+                            </pre>
+                          );
+                        },
+                      }}
+                    >
+                      {msg.content || "..."}
+                    </ReactMarkdown>
+                  </div>
+                ) : (
+                  <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                )}
+              </div>
             </div>
             {msg.role === "user" && (
               <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center flex-shrink-0">
@@ -374,7 +426,11 @@ CURRENT PROJECT FILES:`;
               <Loader2 className="w-4 h-4 text-primary animate-spin" />
             </div>
             <div className="bg-card border border-border rounded-lg px-4 py-2">
-              <span className="text-sm text-muted-foreground">Pensando com {selectedModel.name}...</span>
+              <span className="text-sm text-muted-foreground">
+                {reasoningEnabled && selectedModel.supportsReasoning 
+                  ? `🧠 Pensando com ${selectedModel.name}...` 
+                  : `Pensando com ${selectedModel.name}...`}
+              </span>
             </div>
           </div>
         )}
@@ -402,6 +458,29 @@ CURRENT PROJECT FILES:`;
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Collapsible reasoning block */
+function ReasoningBlock({ content }: { content: string }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="rounded-lg border border-accent/20 bg-accent/5 overflow-hidden">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-accent hover:bg-accent/10 transition-colors"
+      >
+        <Brain className="w-3 h-3" />
+        <span className="font-medium">Cadeia de Pensamento</span>
+        <ChevronDown className={`w-3 h-3 ml-auto transition-transform ${expanded ? "rotate-180" : ""}`} />
+      </button>
+      {expanded && (
+        <div className="px-3 pb-2 text-xs text-muted-foreground font-mono whitespace-pre-wrap max-h-48 overflow-auto border-t border-accent/10">
+          {content}
+        </div>
+      )}
     </div>
   );
 }
