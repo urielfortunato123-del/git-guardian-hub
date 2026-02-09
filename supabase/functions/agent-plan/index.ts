@@ -5,17 +5,37 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+function buildProvider(
+  messages: unknown[],
+  reasoning: boolean,
+  maxTokens: number,
+) {
+  const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+
+  if (OPENROUTER_API_KEY) {
+    const model = reasoning ? "openai/gpt-oss-120b:exacto" : "google/gemini-2.5-flash";
+    const body: Record<string, unknown> = { model, messages, max_tokens: maxTokens };
+    if (reasoning) body.reasoning = { enabled: true };
+    return { url: "https://openrouter.ai/api/v1/chat/completions", key: OPENROUTER_API_KEY, body };
+  }
+  if (LOVABLE_API_KEY) {
+    return {
+      url: "https://ai.gateway.lovable.dev/v1/chat/completions",
+      key: LOVABLE_API_KEY,
+      body: { model: "google/gemini-3-flash-preview", messages },
+    };
+  }
+  throw new Error("No AI API key configured");
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!OPENROUTER_API_KEY && !LOVABLE_API_KEY) throw new Error("No AI API key configured");
-
-    const { analysis, files, selectedImprovements } = await req.json();
+    const { analysis, files, selectedImprovements, reasoning } = await req.json();
 
     if (!analysis || !files) {
       return new Response(JSON.stringify({ error: "Analysis and files are required" }), {
@@ -64,20 +84,13 @@ Be specific about what exactly needs to change in each file. Order steps by depe
       },
     ];
 
-    let response: Response;
-    if (OPENROUTER_API_KEY) {
-      response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${OPENROUTER_API_KEY}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "google/gemini-2.5-flash", messages, max_tokens: 4096 }),
-      });
-    } else {
-      response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "google/gemini-3-flash-preview", messages }),
-      });
-    }
+    const provider = buildProvider(messages, !!reasoning, 4096);
+
+    const response = await fetch(provider.url, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${provider.key}`, "Content-Type": "application/json" },
+      body: JSON.stringify(provider.body),
+    });
 
     if (!response.ok) {
       const errText = await response.text();
@@ -97,6 +110,11 @@ Be specific about what exactly needs to change in each file. Order steps by depe
       plan = JSON.parse(jsonMatch[1]!.trim());
     } catch {
       plan = { raw: content, error: "Failed to parse plan" };
+    }
+
+    const reasoningContent = data.choices?.[0]?.message?.reasoning_content;
+    if (reasoningContent) {
+      plan._reasoning = reasoningContent;
     }
 
     return new Response(JSON.stringify(plan), {

@@ -4,7 +4,7 @@ import {
   ArrowLeft, ArrowRight, Loader2, Shield, Zap, AlertTriangle,
   CheckCircle2, FileCode, GitBranch, Play, RotateCcw,
   ChevronDown, ChevronRight, Upload, Search, Github,
-  BarChart3, Lock, Bug, Sparkles, Package, Download
+  BarChart3, Lock, Bug, Sparkles, Package, Download, Brain
 } from "lucide-react";
 import { FolderUpload } from "@/components/FolderUpload";
 import { useAgentWorkflow, type Improvement, type PlanStep } from "@/hooks/useAgentWorkflow";
@@ -40,6 +40,27 @@ function ScoreBar({ score, label }: { score: number; label: string }) {
       <div className="h-2 bg-secondary rounded-full overflow-hidden">
         <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${score * 10}%` }} />
       </div>
+    </div>
+  );
+}
+
+function WorkflowReasoningBlock({ content }: { content: string }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="rounded-xl border border-primary/20 bg-primary/5 overflow-hidden">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-primary hover:bg-primary/10 transition-colors"
+      >
+        <Brain className="w-3.5 h-3.5" />
+        <span className="font-medium">Raciocínio do modelo (Chain of Thought)</span>
+        {expanded ? <ChevronDown className="w-3 h-3 ml-auto" /> : <ChevronRight className="w-3 h-3 ml-auto" />}
+      </button>
+      {expanded && (
+        <div className="px-4 pb-3 text-xs text-muted-foreground max-h-60 overflow-auto whitespace-pre-wrap border-t border-primary/10">
+          {content}
+        </div>
+      )}
     </div>
   );
 }
@@ -193,9 +214,23 @@ export function WorkflowPage() {
           <h1 className="text-2xl font-bold text-foreground">Workflow do Agente</h1>
           <p className="text-xs text-muted-foreground mt-1">{files.length} arquivos carregados</p>
         </div>
-        <button onClick={() => { workflow.reset(); setFiles([]); }} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
-          <RotateCcw className="w-4 h-4" /> Recomeçar
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => workflow.setReasoningEnabled(!workflow.reasoningEnabled)}
+            className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-colors ${
+              workflow.reasoningEnabled
+                ? "bg-primary/15 text-primary border border-primary/30"
+                : "bg-secondary text-muted-foreground border border-border"
+            }`}
+            title="Ativa reasoning (Chain of Thought) com GPT-OSS 120B"
+          >
+            <Brain className="w-3.5 h-3.5" />
+            Reasoning {workflow.reasoningEnabled ? "ON" : "OFF"}
+          </button>
+          <button onClick={() => { workflow.reset(); setFiles([]); }} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
+            <RotateCcw className="w-4 h-4" /> Recomeçar
+          </button>
+        </div>
       </div>
 
       {/* Progress bar */}
@@ -246,6 +281,8 @@ export function WorkflowPage() {
       {/* Step: Analysis results */}
       {workflow.step === "analyze" && workflow.analysis && (
         <div className="space-y-6">
+          {/* Reasoning block */}
+          {workflow.reasoningContent && <WorkflowReasoningBlock content={workflow.reasoningContent} />}
           {/* Summary */}
           <div className="bg-card border border-border rounded-xl p-6">
             <h2 className="font-bold text-foreground mb-3">📊 Resumo da Análise</h2>
@@ -338,6 +375,7 @@ export function WorkflowPage() {
       {/* Step: Action Plan */}
       {workflow.step === "plan" && workflow.plan && (
         <div className="space-y-4">
+          {workflow.reasoningContent && <WorkflowReasoningBlock content={workflow.reasoningContent} />}
           <div className="bg-card border border-border rounded-xl p-6">
             <h2 className="font-bold text-foreground mb-1">📋 Plano de Ação</h2>
             <p className="text-xs text-muted-foreground mb-4">

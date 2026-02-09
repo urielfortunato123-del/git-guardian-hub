@@ -54,6 +54,8 @@ export function useAgentWorkflow() {
   const [selectedImprovements, setSelectedImprovements] = useState<Improvement[]>([]);
   const [patchContent, setPatchContent] = useState<string>("");
   const [patchedFiles, setPatchedFiles] = useState<Record<string, string>>({});
+  const [reasoningEnabled, setReasoningEnabled] = useState(false);
+  const [reasoningContent, setReasoningContent] = useState<string | null>(null);
 
   const apiUrl = import.meta.env.VITE_SUPABASE_URL;
   const apiKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
@@ -79,12 +81,18 @@ export function useAgentWorkflow() {
   const analyze = useCallback(async (files: FileData[], projectName?: string, stack?: string) => {
     setIsLoading(true);
     setError(null);
+    setReasoningContent(null);
     try {
       const result = await callFunction("agent-analyze", {
         files: files.map(f => ({ path: f.path, content: f.content, size: f.content.length })),
         projectName,
         stack,
+        reasoning: reasoningEnabled,
       });
+      if (result._reasoning) {
+        setReasoningContent(result._reasoning);
+        delete result._reasoning;
+      }
       setAnalysis(result);
       setStep("analyze");
     } catch (e) {
@@ -92,18 +100,24 @@ export function useAgentWorkflow() {
     } finally {
       setIsLoading(false);
     }
-  }, [callFunction]);
+  }, [callFunction, reasoningEnabled]);
 
   const generatePlan = useCallback(async (files: FileData[], improvements?: Improvement[]) => {
     setIsLoading(true);
     setError(null);
+    setReasoningContent(null);
     try {
       const selected = improvements || selectedImprovements;
       const result = await callFunction("agent-plan", {
         analysis,
         files: files.map(f => ({ path: f.path, content: f.content })),
         selectedImprovements: selected.length > 0 ? selected : undefined,
+        reasoning: reasoningEnabled,
       });
+      if (result._reasoning) {
+        setReasoningContent(result._reasoning);
+        delete result._reasoning;
+      }
       setPlan(result);
       setStep("plan");
     } catch (e) {
@@ -111,7 +125,7 @@ export function useAgentWorkflow() {
     } finally {
       setIsLoading(false);
     }
-  }, [callFunction, analysis, selectedImprovements]);
+  }, [callFunction, analysis, selectedImprovements, reasoningEnabled]);
 
   const generatePatch = useCallback(async (planStep: PlanStep, files: FileData[]) => {
     setIsLoading(true);
@@ -126,6 +140,7 @@ export function useAgentWorkflow() {
         body: JSON.stringify({
           step: planStep,
           files: files.map(f => ({ path: f.path, content: f.content })),
+          reasoning: reasoningEnabled,
         }),
       });
 
@@ -192,6 +207,7 @@ export function useAgentWorkflow() {
     setPatchContent("");
     setPatchedFiles({});
     setError(null);
+    setReasoningContent(null);
   }, []);
 
   return {
@@ -205,6 +221,9 @@ export function useAgentWorkflow() {
     setSelectedImprovements,
     patchContent,
     patchedFiles,
+    reasoningEnabled,
+    setReasoningEnabled,
+    reasoningContent,
     analyze,
     generatePlan,
     generatePatch,
