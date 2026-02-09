@@ -2,6 +2,7 @@ import { ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { GitBranch, FolderGit2, Plus, Rocket, LayoutDashboard, LogOut, Settings, Sparkles, Stethoscope, Workflow } from "lucide-react";
 import { GlobalModelSelector } from "@/components/GlobalModelSelector";
+import { APIKeysSettings } from "@/components/APIKeysSettings";
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -52,9 +53,12 @@ export function AppLayout({ children, user, onLogout }: AppLayoutProps) {
           })}
         </nav>
 
-        {/* Global Model Selector */}
+        {/* Global Model Selector + Settings */}
         <div className="px-3 pt-3 pb-2">
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5 px-1">Modelo AI</p>
+          <div className="flex items-center justify-between mb-1.5 px-1">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Modelo AI</p>
+            <APIKeysSettings />
+          </div>
           <GlobalModelSelector />
         </div>
 
