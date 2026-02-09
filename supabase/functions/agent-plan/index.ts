@@ -69,7 +69,7 @@ Be specific about what exactly needs to change in each file. Order steps by depe
       response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         headers: { Authorization: `Bearer ${OPENROUTER_API_KEY}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "google/gemini-2.5-flash", messages }),
+        body: JSON.stringify({ model: "google/gemini-2.5-flash", messages, max_tokens: 4096 }),
       });
     } else {
       response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {

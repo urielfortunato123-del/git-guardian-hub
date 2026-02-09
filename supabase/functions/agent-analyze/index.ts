@@ -88,7 +88,7 @@ Analyze the project and return a JSON object with:
           Authorization: `Bearer ${OPENROUTER_API_KEY}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ model: "google/gemini-2.5-flash", messages }),
+        body: JSON.stringify({ model: "google/gemini-2.5-flash", messages, max_tokens: 4096 }),
       });
     } else {
       response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
