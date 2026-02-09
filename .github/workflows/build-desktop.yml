@@ -4,9 +4,10 @@ on:
   push:
     tags:
       - 'v*'
-  release:
-    types: [published]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build-windows:
@@ -26,14 +27,18 @@ jobs:
       - name: Build frontend
         run: npm run build
 
-      - name: Build Windows installer
-        run: npx electron-builder --win --publish never
+      - name: Build & Publish Windows installer
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --win --publish always
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
           name: windows-installer
-          path: release/*.exe
+          path: |
+            release/*.exe
+            release/latest.yml
           retention-days: 30
 
   build-macos:
@@ -53,14 +58,18 @@ jobs:
       - name: Build frontend
         run: npm run build
 
-      - name: Build macOS installer
-        run: npx electron-builder --mac --publish never
+      - name: Build & Publish macOS installer
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --mac --publish always
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
         with:
           name: macos-installer
-          path: release/*.dmg
+          path: |
+            release/*.dmg
+            release/latest-mac.yml
           retention-days: 30
 
   build-linux:
@@ -80,8 +89,10 @@ jobs:
       - name: Build frontend
         run: npm run build
 
-      - name: Build Linux installers
-        run: npx electron-builder --linux --publish never
+      - name: Build & Publish Linux installers
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --linux --publish always
 
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@v4
@@ -90,21 +101,5 @@ jobs:
           path: |
             release/*.AppImage
             release/*.deb
+            release/latest-linux.yml
           retention-days: 30
-
-  upload-release:
-    needs: [build-windows, build-macos, build-linux]
-    runs-on: ubuntu-latest
-    if: github.event_name == 'release'
-    permissions:
-      contents: write
-    steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: Upload to GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: artifacts/**/*

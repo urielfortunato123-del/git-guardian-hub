@@ -1,7 +1,9 @@
-const { app, BrowserWindow, shell } = require("electron");
+const { app, BrowserWindow, shell, dialog } = require("electron");
 const path = require("path");
 const { spawn } = require("child_process");
 const fs = require("fs");
+const log = require("electron-log");
+const { autoUpdater } = require("electron-updater");
 
 let mainWindow;
 let daemonProcess;
@@ -105,6 +107,11 @@ app.whenReady().then(() => {
   startDaemon();
   createWindow();
 
+  // Auto-update (only in packaged builds)
+  if (!isDev) {
+    setupAutoUpdater();
+  }
+
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
@@ -118,3 +125,68 @@ app.on("window-all-closed", () => {
 app.on("before-quit", () => {
   stopDaemon();
 });
+
+
+// ── Auto Updater ──
+
+function setupAutoUpdater() {
+  autoUpdater.logger = log;
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on("update-available", (info) => {
+    dialog.showMessageBox(mainWindow, {
+      type: "info",
+      title: "Atualização Disponível",
+      message: `Nova versão ${info.version} disponível. Deseja baixar agora?`,
+      buttons: ["Baixar", "Depois"],
+      defaultId: 0,
+    }).then(({ response }) => {
+      if (response === 0) {
+        autoUpdater.downloadUpdate();
+        if (mainWindow) {
+          mainWindow.webContents.send("update-status", "downloading");
+        }
+      }
+    });
+  });
+
+  autoUpdater.on("update-not-available", () => {
+    log.info("No updates available.");
+  });
+
+  autoUpdater.on("download-progress", (progress) => {
+    if (mainWindow) {
+      mainWindow.setProgressBar(progress.percent / 100);
+      mainWindow.webContents.send("update-status", "downloading", Math.round(progress.percent));
+    }
+  });
+
+  autoUpdater.on("update-downloaded", () => {
+    if (mainWindow) {
+      mainWindow.setProgressBar(-1);
+    }
+    dialog.showMessageBox(mainWindow, {
+      type: "info",
+      title: "Atualização Pronta",
+      message: "A atualização foi baixada. O app será reiniciado para instalar.",
+      buttons: ["Reiniciar Agora", "Depois"],
+      defaultId: 0,
+    }).then(({ response }) => {
+      if (response === 0) {
+        autoUpdater.quitAndInstall();
+      }
+    });
+  });
+
+  autoUpdater.on("error", (err) => {
+    log.error("Auto-update error:", err);
+  });
+
+  // Check for updates after 5 seconds
+  setTimeout(() => {
+    autoUpdater.checkForUpdates().catch((err) => {
+      log.warn("Update check failed:", err.message);
+    });
+  }, 5000);
+}
