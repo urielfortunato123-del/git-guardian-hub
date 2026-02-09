@@ -8,12 +8,14 @@ const corsHeaders = {
 interface Message {
   role: "system" | "user" | "assistant";
   content: string;
+  reasoning_details?: unknown;
 }
 
 interface ChatRequest {
   messages: Message[];
-  files?: Record<string, string>; // path -> content
+  files?: Record<string, string>;
   model?: string;
+  reasoning?: boolean;
 }
 
 serve(async (req) => {
@@ -27,7 +29,7 @@ serve(async (req) => {
       throw new Error("OPENROUTER_API_KEY is not configured");
     }
 
-    const { messages, files, model }: ChatRequest = await req.json();
+    const { messages, files, model, reasoning }: ChatRequest = await req.json();
 
     // Build system prompt with file context
     let systemPrompt = `You are an expert AI coding assistant integrated into LovHub, a GitHub-like project manager. You help users edit their code files.
@@ -59,6 +61,29 @@ CURRENT PROJECT FILES:`;
       systemPrompt += "\n\n(No files uploaded yet)";
     }
 
+    // Preserve reasoning_details in assistant messages
+    const apiMessages = [
+      { role: "system" as const, content: systemPrompt },
+      ...messages.map(m => {
+        const msg: Record<string, unknown> = { role: m.role, content: m.content };
+        if (m.reasoning_details) {
+          msg.reasoning_details = m.reasoning_details;
+        }
+        return msg;
+      }),
+    ];
+
+    const body: Record<string, unknown> = {
+      model: model || "openai/gpt-4o-mini",
+      messages: apiMessages,
+      stream: true,
+    };
+
+    // Enable reasoning if requested
+    if (reasoning) {
+      body.reasoning = { enabled: true };
+    }
+
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -67,14 +92,7 @@ CURRENT PROJECT FILES:`;
         "HTTP-Referer": "https://lovable.dev",
         "X-Title": "LovHub AI Editor",
       },
-      body: JSON.stringify({
-        model: model || "openai/gpt-4o-mini",
-        messages: [
-          { role: "system", content: systemPrompt },
-          ...messages,
-        ],
-        stream: true,
-      }),
+      body: JSON.stringify(body),
     });
 
     if (!response.ok) {
@@ -100,7 +118,6 @@ CURRENT PROJECT FILES:`;
       });
     }
 
-    // Stream the response back
     return new Response(response.body, {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
