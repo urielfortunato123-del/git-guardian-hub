@@ -18,24 +18,23 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Authenticate with admin secret
-    const authHeader = req.headers.get("x-admin-key");
-    const adminKey = Deno.env.get("LICENSE_ADMIN_KEY");
+    const body = await req.json();
+    const { api_secret, license_key, email, plan_type, duration_days } = body;
 
-    if (!adminKey || authHeader !== adminKey) {
+    // Authenticate with api_secret
+    const adminKey = Deno.env.get("LICENSE_ADMIN_KEY");
+    if (!adminKey || api_secret !== adminKey) {
       return json({ success: false, error: "Não autorizado" }, 401);
+    }
+
+    if (!license_key || !email) {
+      return json({ success: false, error: "license_key e email são obrigatórios" }, 400);
     }
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
-
-    const { license_key, email, max_activations, expires_at } = await req.json();
-
-    if (!license_key || !email) {
-      return json({ success: false, error: "license_key e email são obrigatórios" }, 400);
-    }
 
     // Check if key already exists
     const { data: existing } = await supabase
@@ -48,12 +47,28 @@ Deno.serve(async (req) => {
       return json({ success: false, error: "Chave já existe" }, 409);
     }
 
+    // Calculate expiration from duration_days
+    let expires_at: string | null = null;
+    if (duration_days && duration_days > 0) {
+      const expDate = new Date();
+      expDate.setDate(expDate.getDate() + duration_days);
+      expires_at = expDate.toISOString();
+    }
+
+    // Map plan_type to max_activations
+    const activationsMap: Record<string, number> = {
+      standard: 1,
+      professional: 3,
+      enterprise: 10,
+    };
+    const max_activations = activationsMap[plan_type] || 1;
+
     // Insert new license
     const { data, error } = await supabase.from("licenses").insert({
       license_key,
       user_email: email.toLowerCase().trim(),
-      max_activations: max_activations || 1,
-      expires_at: expires_at || null,
+      max_activations,
+      expires_at,
       is_active: true,
     }).select().single();
 
@@ -61,7 +76,18 @@ Deno.serve(async (req) => {
       return json({ success: false, error: error.message }, 500);
     }
 
-    return json({ success: true, license: data });
+    return json({
+      success: true,
+      license: {
+        id: data.id,
+        license_key: data.license_key,
+        email: data.user_email,
+        plan_type: plan_type || "standard",
+        max_activations: data.max_activations,
+        expires_at: data.expires_at,
+        created_at: data.created_at,
+      },
+    });
   } catch (err) {
     return json({ success: false, error: String(err) }, 500);
   }
