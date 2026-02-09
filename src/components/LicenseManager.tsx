@@ -68,7 +68,7 @@ export function LicenseManager() {
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [duration, setDuration] = useState("30d");
-  const [maxActivations, setMaxActivations] = useState("3");
+  const [maxActivations, setMaxActivations] = useState("1");
   const [generating, setGenerating] = useState(false);
 
   const fetchLicenses = async () => {
@@ -179,15 +179,18 @@ export function LicenseManager() {
           </div>
 
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Máx. ativações</label>
-            <Input
-              type="number"
-              min="1"
-              max="100"
-              value={maxActivations}
-              onChange={(e) => setMaxActivations(e.target.value)}
-              className="bg-secondary border-border"
-            />
+            <label className="text-xs text-muted-foreground mb-1 block">Máx. máquinas</label>
+            <Select value={maxActivations} onValueChange={setMaxActivations}>
+              <SelectTrigger className="bg-secondary border-border">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="1">1 máquina (recomendado)</SelectItem>
+                <SelectItem value="2">2 máquinas</SelectItem>
+                <SelectItem value="3">3 máquinas</SelectItem>
+                <SelectItem value="5">5 máquinas</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="flex items-end">
@@ -225,7 +228,7 @@ export function LicenseManager() {
                   <TableHead>Chave</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Duração</TableHead>
-                  <TableHead>Ativações</TableHead>
+                  <TableHead>Máquinas</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Criada</TableHead>
                   <TableHead></TableHead>
@@ -253,8 +256,8 @@ export function LicenseManager() {
                     <TableCell className="text-sm">
                       {formatDate(lic.expires_at)}
                     </TableCell>
-                    <TableCell className="text-sm">
-                      {lic.current_activations}/{lic.max_activations}
+                    <TableCell className="text-sm font-mono">
+                      {lic.current_activations}/{lic.max_activations} 🖥️
                     </TableCell>
                     <TableCell>
                       {!lic.is_active ? (
