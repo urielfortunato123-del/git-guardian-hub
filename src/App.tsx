@@ -17,6 +17,7 @@ import { DeployPage } from "@/pages/DeployPage";
 import { WorkflowPage } from "@/pages/WorkflowPage";
 import { ModelsPage } from "@/pages/ModelsPage";
 import { SelfImprovePage } from "@/pages/SelfImprovePage";
+import { GuidePage } from "@/pages/GuidePage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -42,6 +43,7 @@ function AppRoutes() {
         <Route path="/workflow" element={<WorkflowPage />} />
         <Route path="/models" element={<ModelsPage />} />
         <Route path="/self-improve" element={<SelfImprovePage />} />
+        <Route path="/guide" element={<GuidePage />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </AppLayout>
