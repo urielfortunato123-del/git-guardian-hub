@@ -24,10 +24,10 @@ import NotFound from "./pages/NotFound";
 const queryClient = new QueryClient();
 
 function AppRoutes() {
-  const { user, isLoading, login, logout } = useAuth();
+  const { user, isLoading, error, login, logout } = useAuth();
 
   if (!user) {
-    return <LoginPage onLogin={login} isLoading={isLoading} />;
+    return <LoginPage onLogin={login} isLoading={isLoading} error={error} />;
   }
 
   return (
