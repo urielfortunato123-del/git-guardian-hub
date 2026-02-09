@@ -56,7 +56,7 @@ RULES:
       response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         headers: { Authorization: `Bearer ${OPENROUTER_API_KEY}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "google/gemini-2.5-flash", messages, stream: true }),
+        body: JSON.stringify({ model: "google/gemini-2.5-flash", messages, stream: true, max_tokens: 8192 }),
       });
     } else {
       response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
