@@ -62,3 +62,11 @@ verify_jwt = false
 [functions.agent-patch]
 enabled = true
 verify_jwt = false
+
+[functions.license-create]
+enabled = true
+verify_jwt = false
+
+[functions.license-verify]
+enabled = true
+verify_jwt = false
