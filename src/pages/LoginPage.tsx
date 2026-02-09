@@ -1,4 +1,4 @@
-import { GitBranch, Github, ArrowRight, Code2, FolderGit2, Rocket } from "lucide-react";
+import { GitBranch, Github, ArrowRight, Code2, FolderGit2, Rocket, Sparkles, Stethoscope, Smartphone } from "lucide-react";
 import { motion } from "framer-motion";
 
 interface LoginPageProps {
@@ -7,9 +7,10 @@ interface LoginPageProps {
 }
 
 const features = [
-  { icon: FolderGit2, title: "Navegue seus repos", desc: "Explore arquivos e pastas direto no browser" },
-  { icon: Code2, title: "Edite com Monaco", desc: "Editor profissional estilo VS Code" },
-  { icon: Rocket, title: "Deploy em 1 clique", desc: "Publique para Vercel ou Render instantaneamente" },
+  { icon: Code2, title: "Editor com Monaco + IA", desc: "Edite código com assistente de IA integrado" },
+  { icon: Stethoscope, title: "Repo Doctor", desc: "Analise projetos, gere patches e abra PRs" },
+  { icon: Smartphone, title: "Multi-plataforma", desc: "Crie apps para Android, iOS, Desktop, Web e mais" },
+  { icon: Rocket, title: "Deploy em 1 clique", desc: "Publique para qualquer plataforma instantaneamente" },
 ];
 
 export function LoginPage({ onLogin, isLoading }: LoginPageProps) {
@@ -29,12 +30,12 @@ export function LoginPage({ onLogin, isLoading }: LoginPageProps) {
             </div>
             <div>
               <h1 className="text-3xl font-bold text-foreground tracking-tight">LovHub</h1>
-              <p className="text-sm text-muted-foreground">GitHub Project Manager</p>
+              <p className="text-sm text-muted-foreground">Dev Platform by Uriel Fortunato</p>
             </div>
           </div>
 
           <p className="text-muted-foreground mb-8 text-lg leading-relaxed">
-            Gerencie repos, edite código e faça deploy — tudo no browser.
+            Plataforma completa de desenvolvimento: edite código com IA, analise repositórios e crie projetos multi-plataforma.
           </p>
 
           <button
@@ -50,6 +51,19 @@ export function LoginPage({ onLogin, isLoading }: LoginPageProps) {
           <p className="text-xs text-muted-foreground mt-4 text-center">
             Permissões: leitura/escrita em repos · OAuth seguro
           </p>
+
+          {/* Developer credit */}
+          <div className="mt-12 pt-6 border-t border-border text-center">
+            <p className="text-xs text-muted-foreground">
+              Desenvolvido por
+            </p>
+            <p className="text-sm font-semibold text-foreground mt-1">
+              Uriel da Fonseca Fortunato
+            </p>
+            <p className="text-[10px] text-muted-foreground mt-1 font-mono">
+              © {new Date().getFullYear()} · Todos os direitos reservados
+            </p>
+          </div>
         </motion.div>
       </div>
 
@@ -76,7 +90,7 @@ export function LoginPage({ onLogin, isLoading }: LoginPageProps) {
 
           <div className="pt-6 border-t border-border">
             <p className="text-xs text-muted-foreground font-mono">
-              $ lovhub deploy --prod ✨
+              $ lovhub create --platform android ✨
             </p>
           </div>
         </div>
