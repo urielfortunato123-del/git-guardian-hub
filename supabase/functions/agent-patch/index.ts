@@ -11,8 +11,9 @@ serve(async (req) => {
   }
 
   try {
+    const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+    if (!OPENROUTER_API_KEY && !LOVABLE_API_KEY) throw new Error("No AI API key configured");
 
     const { step, files } = await req.json();
 
@@ -42,38 +43,35 @@ RULES:
 - Follow existing code style and conventions
 - If creating a new file, use the same format`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
+    const messages = [
+      { role: "system", content: systemPrompt },
+      {
+        role: "user",
+        content: `Execute this improvement step:\n\nTitle: ${step.title}\nDescription: ${step.description}\nType: ${step.type}\nFiles to modify: ${step.files?.join(", ")}\n\nCurrent file contents:\n${fileContext}`,
       },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          { role: "system", content: systemPrompt },
-          {
-            role: "user",
-            content: `Execute this improvement step:\n\nTitle: ${step.title}\nDescription: ${step.description}\nType: ${step.type}\nFiles to modify: ${step.files?.join(", ")}\n\nCurrent file contents:\n${fileContext}`,
-          },
-        ],
-        stream: true,
-      }),
-    });
+    ];
+
+    let response: Response;
+    if (OPENROUTER_API_KEY) {
+      response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${OPENROUTER_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ model: "google/gemini-2.5-flash", messages, stream: true }),
+      });
+    } else {
+      response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ model: "google/gemini-3-flash-preview", messages, stream: true }),
+      });
+    }
 
     if (!response.ok) {
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded." }), {
-          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "Credits exhausted." }), {
-          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
+      const errText = await response.text();
+      console.error("AI error:", response.status, errText);
       return new Response(JSON.stringify({ error: `AI error: ${response.status}` }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: response.status >= 400 && response.status < 500 ? response.status : 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
