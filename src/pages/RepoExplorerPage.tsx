@@ -1,9 +1,9 @@
 import { useState, useMemo, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
 import { ChevronRight, ChevronDown, FileCode, Folder, FolderOpen, ArrowLeft, GitBranch } from "lucide-react";
-import { motion } from "framer-motion";
 import { mockFileTree, mockFileContents, type FileNode } from "@/data/mockData";
 import { AIChat } from "@/components/AIChat";
+import { LiveCodePreview } from "@/components/LiveCodePreview";
 import type { UploadedFile } from "@/lib/fileUtils";
 import { getLanguageFromPath } from "@/lib/fileUtils";
 
@@ -63,6 +63,7 @@ function flattenTree(nodes: FileNode[], contents: Record<string, string>): Uploa
 export function RepoExplorerPage() {
   const { owner, name } = useParams();
   const [fileContents, setFileContents] = useState<Record<string, string>>(mockFileContents);
+  const [generatedFiles, setGeneratedFiles] = useState<Record<string, string>>({});
 
   const files = useMemo<UploadedFile[]>(
     () => flattenTree(mockFileTree, fileContents),
@@ -71,12 +72,13 @@ export function RepoExplorerPage() {
 
   const handleFileUpdate = useCallback((path: string, content: string) => {
     setFileContents(prev => ({ ...prev, [path]: content }));
+    setGeneratedFiles(prev => ({ ...prev, [path]: content }));
   }, []);
 
   return (
     <div className="flex h-full">
       {/* File tree sidebar */}
-      <div className="w-72 border-r border-border bg-sidebar flex flex-col">
+      <div className="w-64 border-r border-border bg-sidebar flex flex-col">
         <div className="h-12 flex items-center gap-2 px-4 border-b border-sidebar-border">
           <Link to="/dashboard" className="text-muted-foreground hover:text-foreground transition-colors">
             <ArrowLeft className="w-4 h-4" />
@@ -96,9 +98,14 @@ export function RepoExplorerPage() {
         </div>
       </div>
 
-      {/* AI Chat agent */}
-      <div className="flex-1 flex flex-col min-h-0">
+      {/* AI Chat agent - left panel */}
+      <div className="flex-1 flex flex-col min-h-0 border-r border-border">
         <AIChat files={files} onFileUpdate={handleFileUpdate} />
+      </div>
+
+      {/* Live code preview - right panel */}
+      <div className="w-[45%] flex flex-col min-h-0 bg-background">
+        <LiveCodePreview files={generatedFiles} />
       </div>
     </div>
   );
