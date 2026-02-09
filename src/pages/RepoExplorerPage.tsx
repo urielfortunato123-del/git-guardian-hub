@@ -1,8 +1,11 @@
-import { useState } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
 import { ChevronRight, ChevronDown, FileCode, Folder, FolderOpen, ArrowLeft, GitBranch } from "lucide-react";
 import { motion } from "framer-motion";
-import { mockFileTree, type FileNode } from "@/data/mockData";
+import { mockFileTree, mockFileContents, type FileNode } from "@/data/mockData";
+import { AIChat } from "@/components/AIChat";
+import type { UploadedFile } from "@/lib/fileUtils";
+import { getLanguageFromPath } from "@/lib/fileUtils";
 
 function FileTreeItem({ node, depth = 0 }: { node: FileNode; depth?: number }) {
   const [open, setOpen] = useState(depth < 1);
@@ -39,8 +42,36 @@ function FileTreeItem({ node, depth = 0 }: { node: FileNode; depth?: number }) {
   );
 }
 
+/** Flatten file tree into UploadedFile[] */
+function flattenTree(nodes: FileNode[], contents: Record<string, string>): UploadedFile[] {
+  const result: UploadedFile[] = [];
+  for (const node of nodes) {
+    if (node.type === "file" && contents[node.path]) {
+      result.push({
+        path: node.path,
+        content: contents[node.path],
+        language: getLanguageFromPath(node.path),
+      });
+    }
+    if (node.children) {
+      result.push(...flattenTree(node.children, contents));
+    }
+  }
+  return result;
+}
+
 export function RepoExplorerPage() {
   const { owner, name } = useParams();
+  const [fileContents, setFileContents] = useState<Record<string, string>>(mockFileContents);
+
+  const files = useMemo<UploadedFile[]>(
+    () => flattenTree(mockFileTree, fileContents),
+    [fileContents]
+  );
+
+  const handleFileUpdate = useCallback((path: string, content: string) => {
+    setFileContents(prev => ({ ...prev, [path]: content }));
+  }, []);
 
   return (
     <div className="flex h-full">
@@ -65,16 +96,9 @@ export function RepoExplorerPage() {
         </div>
       </div>
 
-      {/* Content area */}
-      <div className="flex-1 flex items-center justify-center">
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="text-center"
-        >
-          <FileCode className="w-16 h-16 text-muted-foreground/30 mx-auto mb-4" />
-          <p className="text-muted-foreground text-sm">Selecione um arquivo para editar</p>
-        </motion.div>
+      {/* AI Chat agent */}
+      <div className="flex-1 flex flex-col min-h-0">
+        <AIChat files={files} onFileUpdate={handleFileUpdate} />
       </div>
     </div>
   );
