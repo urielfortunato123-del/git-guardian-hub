@@ -6,6 +6,7 @@ const log = require("electron-log");
 const { autoUpdater } = require("electron-updater");
 
 let mainWindow;
+let splashWindow;
 let daemonProcess;
 
 const isDev = !app.isPackaged;
@@ -62,6 +63,22 @@ function stopDaemon() {
   }
 }
 
+function createSplash() {
+  splashWindow = new BrowserWindow({
+    width: 420,
+    height: 360,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    icon: path.join(__dirname, "..", "public", "icon.png"),
+    webPreferences: { nodeIntegration: false, contextIsolation: true },
+  });
+  splashWindow.loadFile(path.join(__dirname, "splash.html"));
+  splashWindow.center();
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
@@ -74,18 +91,24 @@ function createWindow() {
       preload: path.join(__dirname, "preload.js"),
       nodeIntegration: false,
       contextIsolation: true,
-      webSecurity: false, // Allow local API calls
+      webSecurity: false,
     },
     titleBarStyle: "default",
-    backgroundColor: "#0a0a0a",
+    backgroundColor: "#09090b",
     show: false,
   });
 
   mainWindow.once("ready-to-show", () => {
-    mainWindow.show();
+    // Small delay for splash effect
+    setTimeout(() => {
+      if (splashWindow && !splashWindow.isDestroyed()) {
+        splashWindow.close();
+        splashWindow = null;
+      }
+      mainWindow.show();
+    }, 2500);
   });
 
-  // Open external links in browser
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith("http")) shell.openExternal(url);
     return { action: "deny" };
@@ -104,6 +127,7 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  createSplash();
   startDaemon();
   createWindow();
 
