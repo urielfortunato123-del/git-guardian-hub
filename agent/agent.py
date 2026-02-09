@@ -20,6 +20,8 @@ from git import Repo
 from pathspec import PathSpec
 from pathspec.patterns.gitwildmatch import GitWildMatchPattern
 
+from license import activate_license, verify_license, load_license, start_heartbeat, get_hardware_id
+
 APP_ROOT = Path(os.environ.get("INFINITY_WORKDIR", str(Path.home() / ".infinity_agent"))).resolve()
 APP_ROOT.mkdir(parents=True, exist_ok=True)
 
@@ -478,8 +480,33 @@ def backup_delete(backup_id: str):
     return {"ok": True}
 
 
+# ── License Endpoints ──
+
+class ActivateLicense(BaseModel):
+    license_key: str
+
+@app.post("/v1/license/activate")
+def api_activate_license(req: ActivateLicense):
+    """Activate a license key on this machine."""
+    result = activate_license(req.license_key)
+    if not result.get("valid"):
+        raise HTTPException(403, result.get("error", "Activation failed"))
+    return result
+
+@app.get("/v1/license/status")
+def api_license_status():
+    """Check current license status."""
+    key = load_license()
+    if not key:
+        return {"licensed": False, "hardware_id": get_hardware_id()}
+    result = verify_license()
+    return {"licensed": result.get("valid", False), "hardware_id": get_hardware_id(), **result}
+
+
 if __name__ == "__main__":
     import uvicorn
+    # Start license heartbeat in background
+    start_heartbeat()
     print("🚀 Lovable Infinity Agent running at http://127.0.0.1:8787")
     print(f"📁 Workspace: {APP_ROOT}")
     uvicorn.run(app, host="127.0.0.1", port=8787)
