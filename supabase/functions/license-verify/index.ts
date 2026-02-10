@@ -18,6 +18,13 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Validate client API key
+    const clientKey = req.headers.get("x-license-client-key");
+    const expectedKey = Deno.env.get("LICENSE_CLIENT_KEY");
+    if (!expectedKey || clientKey !== expectedKey) {
+      return json({ valid: false, error: "Client key inválida ou ausente" }, 401);
+    }
+
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
