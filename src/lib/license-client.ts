@@ -20,8 +20,13 @@ interface TimeRemaining {
   message: string;
 }
 
+const LICENSE_CLIENT_KEY = "lck_a7f3e9b2d1c8045f6e7a9b3c2d1e0f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0";
+
 async function callLicenseVerify(body: Record<string, unknown>): Promise<LicenseResult> {
-  const { data, error } = await supabase.functions.invoke("license-verify", { body });
+  const { data, error } = await supabase.functions.invoke("license-verify", {
+    body,
+    headers: { "x-license-client-key": LICENSE_CLIENT_KEY },
+  });
   if (error) return { valid: false, error: error.message };
   return data as LicenseResult;
 }
