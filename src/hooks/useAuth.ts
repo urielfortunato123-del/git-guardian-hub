@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { checkLicense } from "@/lib/license-client";
 
 interface User {
   login: string;
@@ -78,17 +79,7 @@ export function useAuth() {
     setError(null);
 
     try {
-      const resp = await supabase.functions.invoke("license-verify", {
-        body: { action: "validate", license_key: licenseKey, email },
-      });
-
-      if (resp.error) {
-        setError(resp.error.message);
-        setIsLoading(false);
-        return;
-      }
-
-      const data = resp.data as { valid: boolean; error?: string; expires_at?: string };
+      const data = await checkLicense(licenseKey, email);
 
       if (!data.valid) {
         setError(data.error || "Chave ou email inválido");
@@ -178,7 +169,7 @@ export function useAuth() {
     }
   }, [pendingActivation]);
 
-  // Login with email + password
+  // Login with email + password — also verifies license
   const login = useCallback(async (email: string, password: string) => {
     setIsLoading(true);
     setError(null);
@@ -193,6 +184,28 @@ export function useAuth() {
         setError(signInError.message === "Invalid login credentials" 
           ? "Email ou senha incorretos" 
           : signInError.message);
+        setIsLoading(false);
+        return;
+      }
+
+      // After login, fetch profile and verify license is still valid
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("license_key")
+          .eq("user_id", session.user.id)
+          .maybeSingle();
+
+        if (profile?.license_key) {
+          const licenseCheck = await checkLicense(profile.license_key, email);
+          if (!licenseCheck.valid) {
+            await supabase.auth.signOut();
+            setError(licenseCheck.error || "Licença inválida ou expirada");
+            setIsLoading(false);
+            return;
+          }
+        }
       }
       // Auth state change listener will handle setting user
     } catch {
