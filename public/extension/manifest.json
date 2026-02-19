@@ -40,5 +40,8 @@
       "resources": ["shield-inject.js", "widget.html"],
       "matches": ["https://*.lovable.dev/*"]
     }
-  ]
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  }
 }

@@ -19,6 +19,7 @@ const extensionFiles: ExtensionFile[] = [
   { name: "manifest.json", path: "/extension/manifest.json", type: "json" },
   { name: "background.js", path: "/extension/background.js", type: "js" },
   { name: "content.js", path: "/extension/content.js", type: "js" },
+  { name: "crypto-utils.js", path: "/extension/crypto-utils.js", type: "js" },
   { name: "security.js", path: "/extension/security.js", type: "js" },
   { name: "shield-inject.js", path: "/extension/shield-inject.js", type: "js" },
   { name: "supabase-config.js", path: "/extension/supabase-config.js", type: "js" },
