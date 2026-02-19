@@ -1,9 +1,8 @@
 import { useState } from "react";
-import { Search, Check, AlertTriangle, Cpu, Cloud, Monitor, Zap, ExternalLink, Copy, CheckCheck, Info } from "lucide-react";
+import { Search, Check, Cpu, Monitor, ExternalLink, Copy, CheckCheck, Info } from "lucide-react";
 import { motion } from "framer-motion";
-import { AI_MODELS, MODEL_CATEGORIES, type AIModel } from "@/lib/aiModels";
+import { AI_MODELS, type AIModel } from "@/lib/aiModels";
 import { useModel } from "@/contexts/ModelContext";
-import { getAllUserKeys } from "@/components/APIKeysSettings";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -13,32 +12,6 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-
-type CategoryKey = AIModel["category"];
-
-const categoryIcons: Record<CategoryKey, typeof Cloud> = {
-  "cloud-premium": Cloud,
-  "cloud-free": Zap,
-  "local": Monitor,
-};
-
-function getModelReady(model: AIModel): { ok: boolean; reason: string } {
-  if (model.isLocal) return { ok: true, reason: "Requer servidor local rodando" };
-  if (model.providerBackend === "lovable") return { ok: true, reason: "Pronto — sem chave necessária" };
-  if (model.providerBackend === "openrouter") {
-    const keys = getAllUserKeys();
-    return keys["openrouter"]
-      ? { ok: true, reason: "OpenRouter key configurada" }
-      : { ok: true, reason: "Via servidor (key backend)" };
-  }
-  if (model.providerBackend === "huggingface") {
-    const keys = getAllUserKeys();
-    return keys["huggingface"]
-      ? { ok: true, reason: "Hugging Face key configurada" }
-      : { ok: true, reason: "Via servidor (key backend)" };
-  }
-  return { ok: false, reason: "Provedor desconhecido" };
-}
 
 const LOCAL_STORAGE_KEY = "lovhub_local_endpoints";
 
@@ -201,7 +174,7 @@ function LocalSetupGuide() {
                 <span className="text-xs font-medium text-foreground">{ep.name}</span>
                 <code className="text-[10px] text-muted-foreground font-mono flex-1 truncate">{ep.url}</code>
                 <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive hover:text-destructive" onClick={() => removeEndpoint(ep.id)}>
-                  <AlertTriangle className="w-3 h-3" />
+                  <span className="text-xs">✕</span>
                 </Button>
               </div>
             ))}
@@ -232,11 +205,9 @@ function LocalSetupGuide() {
 
 export function ModelsPage() {
   const [query, setQuery] = useState("");
-  const [activeCategory, setActiveCategory] = useState<CategoryKey | "all">("all");
   const { selectedModel, setSelectedModel } = useModel();
 
   const filtered = AI_MODELS.filter((m) => {
-    if (activeCategory !== "all" && m.category !== activeCategory) return false;
     if (query) {
       const q = query.toLowerCase();
       return (
@@ -247,11 +218,6 @@ export function ModelsPage() {
     }
     return true;
   });
-
-  const categories: { key: CategoryKey | "all"; label: string }[] = [
-    { key: "all", label: "Todos" },
-    ...Object.entries(MODEL_CATEGORIES).map(([k, v]) => ({ key: k as CategoryKey, label: v.label })),
-  ];
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
@@ -269,7 +235,7 @@ export function ModelsPage() {
       <LocalSetupGuide />
 
       {/* Search */}
-      <div className="relative mb-4">
+      <div className="relative mb-6">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <input
           value={query}
@@ -279,32 +245,10 @@ export function ModelsPage() {
         />
       </div>
 
-      {/* Category tabs */}
-      <div className="flex gap-2 mb-6 flex-wrap">
-        {categories.map((cat) => (
-          <button
-            key={cat.key}
-            onClick={() => setActiveCategory(cat.key)}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-              activeCategory === cat.key
-                ? "bg-primary text-primary-foreground"
-                : "bg-secondary text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {cat.label}
-            <span className="ml-1 opacity-70">
-              ({cat.key === "all" ? AI_MODELS.length : AI_MODELS.filter((m) => m.category === cat.key).length})
-            </span>
-          </button>
-        ))}
-      </div>
-
       {/* Models grid */}
       <div className="grid gap-3 sm:grid-cols-2">
         {filtered.map((model, i) => {
-          const status = getModelReady(model);
           const isActive = selectedModel.id === model.id;
-          const CatIcon = categoryIcons[model.category] || Cloud;
 
           return (
             <motion.button
@@ -335,20 +279,14 @@ export function ModelsPage() {
 
                   <div className="flex items-center gap-2 mt-2 flex-wrap">
                     <Badge variant="secondary" className="text-[10px] gap-1">
-                      <CatIcon className="w-3 h-3" />
-                      {MODEL_CATEGORIES[model.category].label}
+                      <Monitor className="w-3 h-3" />
+                      Local
                     </Badge>
-                    {model.supportsReasoning && (
-                      <Badge variant="outline" className="text-[10px]">Reasoning</Badge>
-                    )}
-                    {model.isLocal && (
-                      <Badge variant="outline" className="text-[10px]">Local</Badge>
-                    )}
                   </div>
 
-                  <div className={`flex items-center gap-1 mt-2 text-[10px] ${status.ok ? "text-muted-foreground" : "text-destructive"}`}>
-                    {status.ok ? <Check className="w-3 h-3 text-primary" /> : <AlertTriangle className="w-3 h-3" />}
-                    <span>{status.reason}</span>
+                  <div className="flex items-center gap-1 mt-2 text-[10px] text-muted-foreground">
+                    <Check className="w-3 h-3 text-primary" />
+                    <span>Requer servidor local rodando</span>
                   </div>
                 </div>
               </div>

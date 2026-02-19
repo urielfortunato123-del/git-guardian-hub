@@ -219,8 +219,7 @@ export function SelfImprovePage() {
     try {
       let response: Response;
 
-      if (selectedModel.isLocal && selectedModel.baseUrl) {
-        // Local AI
+      {
         const systemPrompt = buildSystemPrompt(filesContext);
         response = await fetch(`${selectedModel.baseUrl}/chat/completions`, {
           method: "POST",
@@ -235,25 +234,6 @@ export function SelfImprovePage() {
             stream: true,
           }),
         });
-      } else {
-        // Cloud AI via edge function
-        const apiMessages = [...messages, userMessage].map(m => ({ role: m.role, content: m.content }));
-        response = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-            },
-            body: JSON.stringify({
-              messages: apiMessages,
-              files: filesContext,
-              model: selectedModel.id,
-              provider: selectedModel.providerBackend || "auto",
-            }),
-          }
-        );
       }
 
       if (!response.ok) {
