@@ -46,19 +46,49 @@ export interface FileData {
 
 type WorkflowStep = "select" | "analyze" | "plan" | "patch" | "apply" | "done";
 
-function getLocalBaseUrl(): string {
+function getSelectedModel() {
   const saved = localStorage.getItem("lovhub_global_model");
-  const model = AI_MODELS.find(m => m.id === saved) || AI_MODELS[0];
+  return AI_MODELS.find(m => m.id === saved) || AI_MODELS[0];
+}
+
+function getLocalBaseUrl(): string {
+  const model = getSelectedModel();
   return model.baseUrl;
 }
 
-async function callLocalAI(prompt: string, systemPrompt: string): Promise<string> {
-  const baseUrl = getLocalBaseUrl();
-  const resp = await fetch(`${baseUrl}/chat/completions`, {
+async function callAI(prompt: string, systemPrompt: string): Promise<string> {
+  const model = getSelectedModel();
+
+  if (model.isLocal) {
+    const resp = await fetch(`${model.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "local-model",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: prompt },
+        ],
+        stream: false,
+      }),
+    });
+    if (!resp.ok) {
+      throw new Error(`Erro ao conectar com IA local (${model.baseUrl}). Verifique se o servidor está rodando.`);
+    }
+    const data = await resp.json();
+    return data.choices?.[0]?.message?.content || "";
+  }
+
+  // Cloud model via OpenRouter proxy edge function
+  const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/openrouter-proxy`;
+  const resp = await fetch(apiUrl, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+    },
     body: JSON.stringify({
-      model: "local-model",
+      model: model.openRouterModel || "google/gemma-3n-e4b-it:free",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: prompt },
@@ -68,7 +98,8 @@ async function callLocalAI(prompt: string, systemPrompt: string): Promise<string
   });
 
   if (!resp.ok) {
-    throw new Error(`Erro ao conectar com IA local (${baseUrl}). Verifique se o servidor está rodando.`);
+    const data = await resp.json().catch(() => ({}));
+    throw new Error(data.error || `Erro na API OpenRouter: ${resp.status}`);
   }
 
   const data = await resp.json();
@@ -121,7 +152,7 @@ Return ONLY valid JSON, no markdown or extra text.`;
 
       const prompt = `Project: ${projectName || "unknown"}\n\nFiles:\n${fileList}\n\nSample contents:\n${sampleFiles}`;
 
-      const response = await callLocalAI(prompt, systemPrompt);
+      const response = await callAI(prompt, systemPrompt);
       const jsonStr = extractJSON(response);
       const result: AnalysisResult = JSON.parse(jsonStr);
       setAnalysis(result);
@@ -148,7 +179,7 @@ Return ONLY valid JSON, no markdown or extra text.`;
 
       const prompt = `Analysis: ${JSON.stringify(analysis)}\n\nSelected improvements: ${JSON.stringify(selected)}\n\nFiles: ${files.map(f => f.path).join(", ")}`;
 
-      const response = await callLocalAI(prompt, systemPrompt);
+      const response = await callAI(prompt, systemPrompt);
       const jsonStr = extractJSON(response);
       const result: ActionPlan = JSON.parse(jsonStr);
       setPlan(result);
@@ -178,22 +209,46 @@ Generate COMPLETE file contents, not diffs.`;
 
       const prompt = `Task: ${planStep.title}\nDescription: ${planStep.description}\n\nCurrent files:\n${filesContent}`;
 
-      const baseUrl = getLocalBaseUrl();
-      const resp = await fetch(`${baseUrl}/chat/completions`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "local-model",
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: prompt },
-          ],
-          stream: true,
-        }),
-      });
+      const model = getSelectedModel();
+      let resp: Response;
 
-      if (!resp.ok) {
-        throw new Error(`Erro ao conectar com IA local (${baseUrl})`);
+      if (model.isLocal) {
+        resp = await fetch(`${model.baseUrl}/chat/completions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "local-model",
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: prompt },
+            ],
+            stream: true,
+          }),
+        });
+        if (!resp.ok) {
+          throw new Error(`Erro ao conectar com IA local (${model.baseUrl})`);
+        }
+      } else {
+        const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/openrouter-proxy`;
+        resp = await fetch(apiUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({
+            model: model.openRouterModel || "google/gemma-3n-e4b-it:free",
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: prompt },
+            ],
+            stream: true,
+          }),
+        });
+        if (!resp.ok) {
+          const data = await resp.json().catch(() => ({}));
+          throw new Error(data.error || `Erro na API OpenRouter: ${resp.status}`);
+        }
       }
 
       const reader = resp.body!.getReader();
