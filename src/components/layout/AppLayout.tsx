@@ -1,13 +1,11 @@
 import { ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { GitBranch, FolderGit2, Plus, Rocket, LayoutDashboard, LogOut, Settings, Sparkles, Stethoscope, Workflow, Cpu, Wrench, BookOpen, Shield, Puzzle, FileArchive } from "lucide-react";
+import { GitBranch, Plus, Rocket, LayoutDashboard, Sparkles, Stethoscope, Workflow, Cpu, Wrench, BookOpen, Puzzle, FileArchive } from "lucide-react";
 import { GlobalModelSelector } from "@/components/GlobalModelSelector";
 import { APIKeysSettings } from "@/components/APIKeysSettings";
 
 interface AppLayoutProps {
   children: ReactNode;
-  user: { login: string; name: string; avatar: string };
-  onLogout: () => void;
 }
 
 const navItems = [
@@ -20,12 +18,11 @@ const navItems = [
   { path: "/new", label: "Novo Projeto", icon: Plus },
   { path: "/import", label: "Importar", icon: FileArchive },
   { path: "/deploy", label: "Deploy", icon: Rocket },
-  { path: "/licenses", label: "Licenças", icon: Shield },
   { path: "/extension", label: "Extensão", icon: Puzzle },
   { path: "/guide", label: "Como Usar", icon: BookOpen },
 ];
 
-export function AppLayout({ children, user, onLogout }: AppLayoutProps) {
+export function AppLayout({ children }: AppLayoutProps) {
   const location = useLocation();
 
   return (
@@ -60,30 +57,12 @@ export function AppLayout({ children, user, onLogout }: AppLayoutProps) {
         </nav>
 
         {/* Global Model Selector + Settings */}
-        <div className="px-3 pt-3 pb-2">
+        <div className="px-3 pt-3 pb-3">
           <div className="flex items-center justify-between mb-1.5 px-1">
             <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Modelo AI</p>
             <APIKeysSettings />
           </div>
           <GlobalModelSelector />
-        </div>
-
-        {/* User */}
-        <div className="p-3 border-t border-sidebar-border">
-          <div className="flex items-center gap-3 px-2 py-2">
-            <img src={user.avatar} alt="" className="w-8 h-8 rounded-full bg-secondary" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-foreground truncate">{user.name}</p>
-              <p className="text-xs text-muted-foreground truncate">@{user.login}</p>
-            </div>
-          </div>
-          <button
-            onClick={onLogout}
-            className="flex items-center gap-2 px-3 py-2 mt-1 w-full text-sm text-muted-foreground hover:text-destructive rounded-md hover:bg-secondary transition-colors"
-          >
-            <LogOut className="w-4 h-4" />
-            Sair
-          </button>
         </div>
       </aside>
 
