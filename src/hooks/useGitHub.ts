@@ -92,17 +92,31 @@ export function useGitHub() {
 
   // Auto-connect on mount if token exists
   useEffect(() => {
+    let cancelled = false;
     if (token && !user) {
-      connect();
+      connect().catch((e) => {
+        if (!cancelled) {
+          console.warn("GitHub auto-connect failed:", e);
+        }
+      });
     }
-  }, [token, user, connect]);
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
 
   // Auto-fetch repos after connecting
   useEffect(() => {
+    let cancelled = false;
     if (user && repos.length === 0) {
-      fetchRepos();
+      fetchRepos().catch((e) => {
+        if (!cancelled) {
+          console.warn("GitHub auto-fetch repos failed:", e);
+        }
+      });
     }
-  }, [user, repos.length, fetchRepos]);
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   return {
     token,
