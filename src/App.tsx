@@ -6,7 +6,6 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { ModelProvider } from "@/contexts/ModelContext";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { LoginPage } from "@/pages/LoginPage";
 import { DashboardPage } from "@/pages/DashboardPage";
 import { RepoExplorerPage } from "@/pages/RepoExplorerPage";
 import { EditorPage } from "@/pages/EditorPage";
@@ -26,23 +25,7 @@ import NotFound from "./pages/NotFound";
 const queryClient = new QueryClient();
 
 function AppRoutes() {
-  const { user, isLoading, error, step, pendingActivation, activateLicense, register, login, logout, switchToActivate, switchToLogin } = useAuth();
-
-  if (!user) {
-    return (
-      <LoginPage
-        step={step}
-        isLoading={isLoading}
-        error={error}
-        pendingActivation={pendingActivation}
-        onActivate={activateLicense}
-        onRegister={register}
-        onLogin={login}
-        onSwitchToActivate={switchToActivate}
-        onSwitchToLogin={switchToLogin}
-      />
-    );
-  }
+  const { user, logout } = useAuth();
 
   return (
     <AppLayout user={user} onLogout={logout}>
