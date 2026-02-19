@@ -19,6 +19,7 @@ import { ModelsPage } from "@/pages/ModelsPage";
 import { SelfImprovePage } from "@/pages/SelfImprovePage";
 import { LicensesPage } from "@/pages/LicensesPage";
 import { GuidePage } from "@/pages/GuidePage";
+import { ExtensionPage } from "@/pages/ExtensionPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -58,6 +59,7 @@ function AppRoutes() {
         <Route path="/self-improve" element={<SelfImprovePage />} />
         <Route path="/licenses" element={<LicensesPage />} />
         <Route path="/guide" element={<GuidePage />} />
+        <Route path="/extension" element={<ExtensionPage />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </AppLayout>
