@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import { AI_MODELS } from "@/lib/aiModels";
 
 export interface AnalysisResult {
   stack?: { type: string; framework: string; language: string; buildTool: string; packageManager: string };
@@ -45,6 +46,45 @@ export interface FileData {
 
 type WorkflowStep = "select" | "analyze" | "plan" | "patch" | "apply" | "done";
 
+function getLocalBaseUrl(): string {
+  const saved = localStorage.getItem("lovhub_global_model");
+  const model = AI_MODELS.find(m => m.id === saved) || AI_MODELS[0];
+  return model.baseUrl;
+}
+
+async function callLocalAI(prompt: string, systemPrompt: string): Promise<string> {
+  const baseUrl = getLocalBaseUrl();
+  const resp = await fetch(`${baseUrl}/chat/completions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "local-model",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: prompt },
+      ],
+      stream: false,
+    }),
+  });
+
+  if (!resp.ok) {
+    throw new Error(`Erro ao conectar com IA local (${baseUrl}). Verifique se o servidor está rodando.`);
+  }
+
+  const data = await resp.json();
+  return data.choices?.[0]?.message?.content || "";
+}
+
+function extractJSON(text: string): string {
+  // Try to find JSON block in markdown code fence
+  const fenceMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)```/);
+  if (fenceMatch) return fenceMatch[1].trim();
+  // Try raw JSON
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (jsonMatch) return jsonMatch[0];
+  return text;
+}
+
 export function useAgentWorkflow() {
   const [step, setStep] = useState<WorkflowStep>("select");
   const [isLoading, setIsLoading] = useState(false);
@@ -57,50 +97,41 @@ export function useAgentWorkflow() {
   const [reasoningEnabled, setReasoningEnabled] = useState(false);
   const [reasoningContent, setReasoningContent] = useState<string | null>(null);
 
-  const apiUrl = import.meta.env.VITE_SUPABASE_URL;
-  const apiKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-
-  const callFunction = useCallback(async (fn: string, body: unknown) => {
-    const resp = await fetch(`${apiUrl}/functions/v1/${fn}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify(body),
-    });
-
-    if (!resp.ok) {
-      const data = await resp.json().catch(() => ({}));
-      throw new Error(data.error || `Error ${resp.status}`);
-    }
-
-    return resp.json();
-  }, [apiUrl, apiKey]);
-
-  const analyze = useCallback(async (files: FileData[], projectName?: string, stack?: string) => {
+  const analyze = useCallback(async (files: FileData[], projectName?: string) => {
     setIsLoading(true);
     setError(null);
     setReasoningContent(null);
     try {
-      const result = await callFunction("agent-analyze", {
-        files: files.map(f => ({ path: f.path, content: f.content, size: f.content.length })),
-        projectName,
-        stack,
-        reasoning: reasoningEnabled,
-      });
-      if (result._reasoning) {
-        setReasoningContent(result._reasoning);
-        delete result._reasoning;
-      }
+      const fileList = files.map(f => `- ${f.path} (${f.content.length} chars)`).join("\n");
+      const sampleFiles = files.slice(0, 10).map(f =>
+        `--- ${f.path} ---\n${f.content.slice(0, 2000)}${f.content.length > 2000 ? "\n... (truncated)" : ""}`
+      ).join("\n\n");
+
+      const systemPrompt = `You are a senior code analyst. Analyze the project and return a JSON object with this exact structure:
+{
+  "stack": { "type": "web|mobile|api|cli", "framework": "string", "language": "string", "buildTool": "string", "packageManager": "string" },
+  "structure": { "score": 1-10, "assessment": "string" },
+  "security": { "score": 1-10, "risks": ["string"], "critical": ["string"] },
+  "quality": { "score": 1-10, "issues": ["string"], "strengths": ["string"] },
+  "dependencies": { "outdated": ["string"], "vulnerable": ["string"], "unnecessary": ["string"] },
+  "improvements": [{ "title": "string", "priority": "critical|high|medium|low", "effort": "small|medium|large", "description": "string", "files": ["string"] }],
+  "summary": "string"
+}
+Return ONLY valid JSON, no markdown or extra text.`;
+
+      const prompt = `Project: ${projectName || "unknown"}\n\nFiles:\n${fileList}\n\nSample contents:\n${sampleFiles}`;
+
+      const response = await callLocalAI(prompt, systemPrompt);
+      const jsonStr = extractJSON(response);
+      const result: AnalysisResult = JSON.parse(jsonStr);
       setAnalysis(result);
       setStep("analyze");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Analysis failed");
+      setError(e instanceof Error ? e.message : "Análise falhou. Verifique se o servidor de IA local está rodando.");
     } finally {
       setIsLoading(false);
     }
-  }, [callFunction, reasoningEnabled]);
+  }, []);
 
   const generatePlan = useCallback(async (files: FileData[], improvements?: Improvement[]) => {
     setIsLoading(true);
@@ -108,48 +139,63 @@ export function useAgentWorkflow() {
     setReasoningContent(null);
     try {
       const selected = improvements || selectedImprovements;
-      const result = await callFunction("agent-plan", {
-        analysis,
-        files: files.map(f => ({ path: f.path, content: f.content })),
-        selectedImprovements: selected.length > 0 ? selected : undefined,
-        reasoning: reasoningEnabled,
-      });
-      if (result._reasoning) {
-        setReasoningContent(result._reasoning);
-        delete result._reasoning;
-      }
+      const systemPrompt = `You are a senior developer. Create an action plan for the given improvements. Return ONLY valid JSON:
+{
+  "steps": [{ "id": 1, "title": "string", "description": "string", "files": ["string"], "type": "security|fix|refactor|performance|feature|docs", "risk": "low|medium|high", "estimatedLines": number }],
+  "totalEstimatedChanges": number,
+  "rollbackStrategy": "string"
+}`;
+
+      const prompt = `Analysis: ${JSON.stringify(analysis)}\n\nSelected improvements: ${JSON.stringify(selected)}\n\nFiles: ${files.map(f => f.path).join(", ")}`;
+
+      const response = await callLocalAI(prompt, systemPrompt);
+      const jsonStr = extractJSON(response);
+      const result: ActionPlan = JSON.parse(jsonStr);
       setPlan(result);
       setStep("plan");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Plan generation failed");
+      setError(e instanceof Error ? e.message : "Geração de plano falhou");
     } finally {
       setIsLoading(false);
     }
-  }, [callFunction, analysis, selectedImprovements, reasoningEnabled]);
+  }, [analysis, selectedImprovements]);
 
   const generatePatch = useCallback(async (planStep: PlanStep, files: FileData[]) => {
     setIsLoading(true);
     setError(null);
     try {
-      const resp = await fetch(`${apiUrl}/functions/v1/agent-patch`, {
+      const relevantFiles = files.filter(f => planStep.files.some(pf => f.path.includes(pf)));
+      const filesContent = relevantFiles.map(f =>
+        `--- ${f.path} ---\n${f.content}`
+      ).join("\n\n");
+
+      const systemPrompt = `You are a senior developer. Generate the complete updated file contents for the requested changes.
+Use this format for each file:
+\`\`\`filepath:path/to/file.ext
+// complete file content here
+\`\`\`
+Generate COMPLETE file contents, not diffs.`;
+
+      const prompt = `Task: ${planStep.title}\nDescription: ${planStep.description}\n\nCurrent files:\n${filesContent}`;
+
+      const baseUrl = getLocalBaseUrl();
+      const resp = await fetch(`${baseUrl}/chat/completions`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          step: planStep,
-          files: files.map(f => ({ path: f.path, content: f.content })),
-          reasoning: reasoningEnabled,
+          model: "local-model",
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: prompt },
+          ],
+          stream: true,
         }),
       });
 
       if (!resp.ok) {
-        const data = await resp.json().catch(() => ({}));
-        throw new Error(data.error || `Error ${resp.status}`);
+        throw new Error(`Erro ao conectar com IA local (${baseUrl})`);
       }
 
-      // Stream the response
       const reader = resp.body!.getReader();
       const decoder = new TextDecoder();
       let fullContent = "";
@@ -182,7 +228,6 @@ export function useAgentWorkflow() {
         }
       }
 
-      // Parse file edits from the response
       const regex = /```filepath:([^\n]+)\n([\s\S]*?)```/g;
       let match;
       const newPatched: Record<string, string> = { ...patchedFiles };
@@ -191,13 +236,12 @@ export function useAgentWorkflow() {
       }
       setPatchedFiles(newPatched);
       setStep("patch");
-
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Patch generation failed");
+      setError(e instanceof Error ? e.message : "Geração de patch falhou");
     } finally {
       setIsLoading(false);
     }
-  }, [apiUrl, apiKey, patchedFiles]);
+  }, [patchedFiles]);
 
   const reset = useCallback(() => {
     setStep("select");
