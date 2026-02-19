@@ -14,7 +14,7 @@ function buildProvider(
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
   if (OPENROUTER_API_KEY) {
-    const model = reasoning ? "openai/gpt-oss-120b:exacto" : "google/gemini-2.5-flash";
+    const model = reasoning ? "openai/gpt-oss-120b:exacto" : "google/gemma-3n-e4b:free";
     const body: Record<string, unknown> = { model, messages, max_tokens: maxTokens };
     if (reasoning) body.reasoning = { enabled: true };
     return { url: "https://openrouter.ai/api/v1/chat/completions", key: OPENROUTER_API_KEY, body };
