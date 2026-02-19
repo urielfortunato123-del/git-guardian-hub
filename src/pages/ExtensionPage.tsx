@@ -124,6 +124,7 @@ function InlineEditor({
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState(false);
   const [showDiff, setShowDiff] = useState(false);
+  const [jsonError, setJsonError] = useState<string | null>(null);
   const editorValueRef = useRef<string>("");
 
   const originalContent = originalContents[file.name] ?? null;
@@ -192,25 +193,47 @@ function InlineEditor({
     );
   }
 
+  const isJson = file.type === "json";
+
+  const validateAndSave = () => {
+    const value = editorValueRef.current;
+    if (isJson) {
+      try {
+        JSON.parse(value);
+        setJsonError(null);
+      } catch (e: any) {
+        const msg = e.message || "JSON inválido";
+        setJsonError(msg);
+        toast.error(`Erro de sintaxe JSON: ${msg}`);
+        return;
+      }
+    }
+    onSave(file.name, value);
+    setEditing(false);
+    toast.success(`${file.name} salvo (em memória)`);
+  };
+
   if (editing) {
     return (
       <div className="space-y-2">
         <div className="flex items-center gap-2 justify-end">
-          <Button size="sm" variant="outline" onClick={() => setEditing(false)}>
+          <Button size="sm" variant="outline" onClick={() => { setEditing(false); setJsonError(null); }}>
             Cancelar
           </Button>
           <Button
             size="sm"
-            onClick={() => {
-              onSave(file.name, editorValueRef.current);
-              setEditing(false);
-              toast.success(`${file.name} salvo (em memória)`);
-            }}
+            onClick={validateAndSave}
           >
             <Save className="w-3.5 h-3.5 mr-1.5" />
             Salvar
           </Button>
         </div>
+        {jsonError && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-destructive/10 border border-destructive/30 text-destructive text-xs font-mono">
+            <span className="font-semibold">JSON Error:</span>
+            <span className="break-all">{jsonError}</span>
+          </div>
+        )}
         <div className="border border-border rounded-md overflow-hidden">
           <Editor
             height="400px"
@@ -219,6 +242,14 @@ function InlineEditor({
             theme="vs-dark"
             onChange={(value) => {
               editorValueRef.current = value ?? "";
+              if (isJson && jsonError) {
+                try {
+                  JSON.parse(value ?? "");
+                  setJsonError(null);
+                } catch {
+                  // keep showing error until valid
+                }
+              }
             }}
             options={{
               minimap: { enabled: false },
