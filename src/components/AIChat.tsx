@@ -5,7 +5,7 @@ import ReactMarkdown from "react-markdown";
 import type { UploadedFile } from "@/lib/fileUtils";
 import { getLanguageFromPath } from "@/lib/fileUtils";
 import { ProjectAnalysis } from "@/components/ProjectAnalysis";
-import { AI_MODELS, MODEL_CATEGORIES, type AIModel } from "@/lib/aiModels";
+import { AI_MODELS, type AIModel } from "@/lib/aiModels";
 import { useModel } from "@/contexts/ModelContext";
 
 interface Attachment {
@@ -59,7 +59,7 @@ export function AIChat({ files, onFileUpdate }: AIChatProps) {
   const [isLoading, setIsLoading] = useState(false);
   const { selectedModel, setSelectedModel } = useModel();
   const [showModelPicker, setShowModelPicker] = useState(false);
-  const [reasoningEnabled, setReasoningEnabled] = useState(true);
+  const [reasoningEnabled] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -194,7 +194,7 @@ export function AIChat({ files, onFileUpdate }: AIChatProps) {
     try {
       let response: Response;
 
-      if (selectedModel.isLocal && selectedModel.baseUrl) {
+      {
         const systemPrompt = buildSystemPrompt(filesObj);
         response = await fetch(`${selectedModel.baseUrl}/chat/completions`, {
           method: "POST",
@@ -209,32 +209,6 @@ export function AIChat({ files, onFileUpdate }: AIChatProps) {
             stream: true,
           }),
         });
-      } else {
-        const apiMessages = [...messages, userMessage].map(m => {
-          const msg: Record<string, unknown> = { role: m.role, content: m.content };
-          if (m.reasoning_details) msg.reasoning_details = m.reasoning_details;
-          return msg;
-        });
-
-        response = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-            },
-            body: JSON.stringify({
-              messages: apiMessages,
-              files: filesObj,
-              model: selectedModel.id,
-              reasoning: reasoningEnabled && selectedModel.supportsReasoning,
-              provider: selectedModel.providerBackend || "auto",
-              images: imageAttachments.length > 0 ? imageAttachments : undefined,
-              pdfNames: pdfNames.length > 0 ? pdfNames : undefined,
-            }),
-          }
-        );
       }
 
       if (!response.ok) {
@@ -423,18 +397,6 @@ CURRENT PROJECT FILES:`;
         </div>
         
         <div className="flex items-center gap-2">
-          {selectedModel.supportsReasoning && (
-            <button
-              onClick={() => setReasoningEnabled(!reasoningEnabled)}
-              className={`flex items-center gap-1 text-[10px] px-2 py-1 rounded-md transition-colors ${
-                reasoningEnabled ? "bg-accent/20 text-accent" : "bg-secondary text-muted-foreground"
-              }`}
-              title="Habilitar reasoning (cadeia de pensamento)"
-            >
-              <Brain className="w-3 h-3" />
-              Reasoning
-            </button>
-          )}
 
           {/* Model Selector */}
           <div className="relative" ref={modelPickerRef}>
@@ -449,37 +411,22 @@ CURRENT PROJECT FILES:`;
             
             {showModelPicker && (
               <div className="absolute right-0 top-full mt-1 w-64 bg-popover border border-border rounded-lg shadow-lg z-50 py-1 max-h-80 overflow-auto">
-                {(Object.entries(MODEL_CATEGORIES) as [string, { label: string; description: string }][]).map(([catKey, cat]) => {
-                  const catModels = AI_MODELS.filter(m => m.category === catKey);
-                  if (catModels.length === 0) return null;
-                  return (
-                    <div key={catKey}>
-                      <div className="px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider border-b border-border/50">
-                        {cat.label}
-                      </div>
-                      {catModels.map((model) => (
-                        <button
-                          key={model.id}
-                          onClick={() => { setSelectedModel(model); setShowModelPicker(false); }}
-                          className={`w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-secondary/60 transition-colors ${
-                            selectedModel.id === model.id ? "bg-primary/10" : ""
-                          }`}
-                        >
-                          <span className="text-sm">{model.icon}</span>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-1.5">
-                              <p className="text-sm font-medium text-foreground truncate">{model.name}</p>
-                              {model.isLocal && <span className="text-[10px] px-1.5 py-0.5 bg-accent text-accent-foreground rounded">LOCAL</span>}
-                              {model.supportsReasoning && <span className="text-[10px] px-1.5 py-0.5 bg-primary/20 text-primary rounded">🧠</span>}
-                            </div>
-                            <p className="text-xs text-muted-foreground">{model.provider}</p>
-                          </div>
-                          {selectedModel.id === model.id && <span className="text-primary text-xs">✓</span>}
-                        </button>
-                      ))}
+            {AI_MODELS.map((model) => (
+                  <button
+                    key={model.id}
+                    onClick={() => { setSelectedModel(model); setShowModelPicker(false); }}
+                    className={`w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-secondary/60 transition-colors ${
+                      selectedModel.id === model.id ? "bg-primary/10" : ""
+                    }`}
+                  >
+                    <span className="text-sm">{model.icon}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">{model.name}</p>
+                      <p className="text-xs text-muted-foreground">{model.provider}</p>
                     </div>
-                  );
-                })}
+                    {selectedModel.id === model.id && <span className="text-primary text-xs">✓</span>}
+                  </button>
+                ))}
               </div>
             )}
           </div>
@@ -595,9 +542,7 @@ CURRENT PROJECT FILES:`;
             </div>
             <div className="bg-card border border-border rounded-lg px-4 py-2">
               <span className="text-sm text-muted-foreground">
-                {reasoningEnabled && selectedModel.supportsReasoning
-                  ? `🧠 Pensando com ${selectedModel.name}...`
-                  : `Pensando com ${selectedModel.name}...`}
+                Pensando com {selectedModel.name}...
               </span>
             </div>
           </div>
