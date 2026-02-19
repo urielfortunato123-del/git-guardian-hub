@@ -30,6 +30,7 @@ export const AI_MODELS: AIModel[] = [
   { id: "meta-llama/llama-3.3-70b-instruct:free", name: "Llama 3.3 70B (Free)", provider: "Meta", icon: "🟣", providerBackend: "openrouter", category: "cloud-free" },
   { id: "meta-llama/llama-3.1-70b-instruct", name: "Llama 3.1 70B", provider: "Meta", icon: "🟣", providerBackend: "openrouter", category: "cloud-free" },
   { id: "deepseek/deepseek-coder", name: "DeepSeek Coder", provider: "DeepSeek", icon: "⚫", providerBackend: "openrouter", category: "cloud-free" },
+  { id: "google/gemma-3n-e4b:free", name: "Gemma 3n 4B (Free)", provider: "Google", icon: "💎", providerBackend: "openrouter", category: "cloud-free" },
 
   // === Hugging Face (needs HUGGINGFACE_API_KEY) ===
   { id: "Qwen/Qwen2.5-Coder-32B-Instruct", name: "Qwen 2.5 Coder 32B", provider: "Hugging Face", icon: "🤗", providerBackend: "huggingface", category: "cloud-free" },
