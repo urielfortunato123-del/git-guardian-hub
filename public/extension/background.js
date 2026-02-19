@@ -1,6 +1,7 @@
 // 🔮 LEIGOS ACADEMY - Background Service Worker
 
 // Importar módulos
+importScripts("crypto-utils.js"); // AES-256-GCM encryption for token storage
 importScripts("supabase-config.js"); // Supabase Edge Functions
 importScripts("security.js"); // Assinatura HMAC
 importScripts("license.js"); // Gerenciamento de licenças
@@ -43,7 +44,7 @@ async function openAsPopup() {
   }
 }
 
-// Interceptor de Token
+// Interceptor de Token — armazena criptografado
 chrome.webRequest.onBeforeSendHeaders.addListener(
   (details) => {
     const authHeader = details.requestHeaders.find(
@@ -53,11 +54,17 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
     if (authHeader && authHeader.value) {
       const token = authHeader.value.replace("Bearer ", "").trim();
       if (token.length > 20) {
-        chrome.storage.local.set({ authToken: token, lovable_token: token });
+        // Armazenar token com criptografia AES-256-GCM
+        secureStoreToken("authToken", token).catch(e => 
+          console.error('[Security] Failed to encrypt token:', e)
+        );
+        secureStoreToken("lovable_token", token).catch(e => 
+          console.error('[Security] Failed to encrypt lovable_token:', e)
+        );
       }
     }
 
-    // Capturar Project ID da URL da requisição
+    // Capturar Project ID da URL da requisição (não sensível)
     const urlMatch = details.url.match(/projects\/([a-f0-9-]+)/);
     if (urlMatch && urlMatch[1]) {
       chrome.storage.local.set({ projectId: urlMatch[1] });
@@ -153,12 +160,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   // Handlers do license.js
   if (request.action === "saveToken") {
-    handleSaveToken(request.token).then(sendResponse);
+    secureStoreToken("authToken", request.token).then(() => sendResponse({ success: true })).catch(e => sendResponse({ success: false, error: e.message }));
     return true;
   }
 
   if (request.action === "getToken") {
-    handleGetToken().then(sendResponse);
+    secureGetToken("authToken").then(token => sendResponse({ token })).catch(e => sendResponse({ token: null, error: e.message }));
     return true;
   }
 
@@ -195,10 +202,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
-  if (
-    request.action === "licenseActivated" ||
-    request.action === "licenseRemoved"
-  ) {
+  if (request.action === "licenseActivated") {
+    startActiveUsersTracking();
+    startSessionCheck();
+    sendResponse({ success: true });
+    return true;
+  }
+
+  if (request.action === "licenseRemoved") {
+    stopActiveUsersTracking();
+    stopSessionCheck();
     sendResponse({ success: true });
     return true;
   }
@@ -269,15 +282,15 @@ async function checkSessionValidity() {
   }
 }
 
-// Iniciar verificação periódica de sessão (a cada 3 segundos para detecção quase instantânea)
+// Iniciar verificação periódica de sessão (a cada 30 segundos — balanceio entre segurança e performance)
 function startSessionCheck() {
   // Verificar imediatamente
   checkSessionValidity();
   
-  // Verificar a cada 3 segundos para logout quase instantâneo
+  // Verificar a cada 30 segundos (reduzido de 3s para evitar rate-limiting)
   if (!sessionCheckInterval) {
-    sessionCheckInterval = setInterval(checkSessionValidity, 3 * 1000);
-    console.log('[Session Check] Validação iniciada (a cada 3 segundos - detecção rápida)');
+    sessionCheckInterval = setInterval(checkSessionValidity, 30 * 1000);
+    console.log('[Session Check] Validação iniciada (a cada 30 segundos)');
   }
 }
 
@@ -364,21 +377,8 @@ function stopActiveUsersTracking() {
 startActiveUsersTracking();
 startSessionCheck();
 
-// Listener para iniciar/parar tracking quando licença for ativada/removida
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === 'licenseActivated') {
-    startActiveUsersTracking();
-    startSessionCheck();
-    sendResponse({ success: true });
-    return true;
-  }
-  
-  if (request.action === 'licenseRemoved') {
-    stopActiveUsersTracking();
-    stopSessionCheck();
-    sendResponse({ success: true });
-    return true;
-  }
-});
+// NOTE: licenseActivated/licenseRemoved handlers already exist in the main
+// onMessage listener above (lines ~199-204). This duplicate listener has been
+// removed to prevent double-handling of messages.
 
 // ===== FIM RASTREAMENTO DE USUÁRIOS ATIVOS =====
