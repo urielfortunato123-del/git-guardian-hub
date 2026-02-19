@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Download, FileCode, Image, FileText, Package, Eye, ChevronRight, ChevronDown, File, Archive, Pencil, RotateCcw, Save } from "lucide-react";
+import { Download, FileCode, Image, FileText, Package, Eye, ChevronRight, ChevronDown, File, Archive, Pencil, RotateCcw, Save, GitCompare, X } from "lucide-react";
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
 import Editor from "@monaco-editor/react";
@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
+import { DiffViewer } from "@/components/DiffViewer";
 
 interface ExtensionFile {
   name: string;
@@ -108,18 +109,24 @@ function ManifestInfo() {
 function InlineEditor({
   file,
   editedFiles,
+  originalContents,
   onSave,
   onReset,
+  onOriginalLoaded,
 }: {
   file: ExtensionFile;
   editedFiles: Record<string, string>;
+  originalContents: Record<string, string>;
   onSave: (name: string, content: string) => void;
   onReset: (name: string) => void;
+  onOriginalLoaded: (name: string, content: string) => void;
 }) {
-  const [originalContent, setOriginalContent] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [showDiff, setShowDiff] = useState(false);
   const editorValueRef = useRef<string>("");
+
+  const originalContent = originalContents[file.name] ?? null;
 
   const loadContent = useCallback(async () => {
     if (originalContent !== null) return;
@@ -127,13 +134,13 @@ function InlineEditor({
     try {
       const res = await fetch(file.path);
       const text = await res.text();
-      setOriginalContent(text);
+      onOriginalLoaded(file.name, text);
       editorValueRef.current = editedFiles[file.name] ?? text;
     } catch {
-      setOriginalContent("// Erro ao carregar arquivo");
+      onOriginalLoaded(file.name, "// Erro ao carregar arquivo");
     }
     setLoading(false);
-  }, [file.path, file.name, originalContent, editedFiles]);
+  }, [file.path, file.name, originalContent, editedFiles, onOriginalLoaded]);
 
   if (file.type === "image") {
     return (
@@ -158,17 +165,38 @@ function InlineEditor({
     );
   }
 
+  if (showDiff && isEdited) {
+    return (
+      <div className="space-y-2">
+        <div className="flex justify-end">
+          <Button size="sm" variant="ghost" onClick={() => setShowDiff(false)}>
+            <X className="w-3.5 h-3.5 mr-1.5" /> Fechar Diff
+          </Button>
+        </div>
+        <DiffViewer
+          originalContent={originalContent}
+          newContent={editedFiles[file.name]}
+          filePath={file.name}
+          onAccept={() => {
+            setShowDiff(false);
+            toast.success(`Alterações em ${file.name} confirmadas`);
+          }}
+          onReject={() => {
+            onReset(file.name);
+            editorValueRef.current = originalContent;
+            setShowDiff(false);
+            toast.info(`${file.name} restaurado ao original`);
+          }}
+        />
+      </div>
+    );
+  }
+
   if (editing) {
     return (
       <div className="space-y-2">
         <div className="flex items-center gap-2 justify-end">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => {
-              setEditing(false);
-            }}
-          >
+          <Button size="sm" variant="outline" onClick={() => setEditing(false)}>
             Cancelar
           </Button>
           <Button
@@ -211,19 +239,29 @@ function InlineEditor({
     <div className="space-y-2">
       <div className="flex items-center gap-2 justify-end">
         {isEdited && (
-          <Button
-            size="sm"
-            variant="ghost"
-            className="text-destructive"
-            onClick={() => {
-              onReset(file.name);
-              editorValueRef.current = originalContent;
-              toast.info(`${file.name} restaurado ao original`);
-            }}
-          >
-            <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
-            Restaurar
-          </Button>
+          <>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setShowDiff(true)}
+            >
+              <GitCompare className="w-3.5 h-3.5 mr-1.5" />
+              Ver Diff
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-destructive"
+              onClick={() => {
+                onReset(file.name);
+                editorValueRef.current = originalContent;
+                toast.info(`${file.name} restaurado ao original`);
+              }}
+            >
+              <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
+              Restaurar
+            </Button>
+          </>
         )}
         <Button
           size="sm"
@@ -251,14 +289,18 @@ function FileList({
   files,
   filter,
   editedFiles,
+  originalContents,
   onSave,
   onReset,
+  onOriginalLoaded,
 }: {
   files: ExtensionFile[];
   filter?: string;
   editedFiles: Record<string, string>;
+  originalContents: Record<string, string>;
   onSave: (name: string, content: string) => void;
   onReset: (name: string) => void;
+  onOriginalLoaded: (name: string, content: string) => void;
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const filtered = filter ? files.filter((f) => f.type === filter) : files;
@@ -298,14 +340,81 @@ function FileList({
                 <InlineEditor
                   file={file}
                   editedFiles={editedFiles}
+                  originalContents={originalContents}
                   onSave={onSave}
                   onReset={onReset}
+                  onOriginalLoaded={onOriginalLoaded}
                 />
               </div>
             )}
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// ─── Diff Review Modal ───
+function DiffReviewModal({
+  editedFiles,
+  originalContents,
+  onClose,
+  onConfirmDownload,
+  onResetFile,
+}: {
+  editedFiles: Record<string, string>;
+  originalContents: Record<string, string>;
+  onClose: () => void;
+  onConfirmDownload: () => void;
+  onResetFile: (name: string) => void;
+}) {
+  const editedNames = Object.keys(editedFiles);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="bg-card border border-border rounded-xl w-full max-w-3xl max-h-[85vh] flex flex-col shadow-xl">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <div>
+            <h2 className="text-lg font-semibold text-foreground">Revisão de Alterações</h2>
+            <p className="text-xs text-muted-foreground">{editedNames.length} arquivo(s) modificado(s)</p>
+          </div>
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            <X className="w-4 h-4" />
+          </Button>
+        </div>
+
+        <ScrollArea className="flex-1 p-5 space-y-4">
+          <div className="space-y-4">
+            {editedNames.map(name => {
+              const original = originalContents[name] || "";
+              return (
+                <DiffViewer
+                  key={name}
+                  originalContent={original}
+                  newContent={editedFiles[name]}
+                  filePath={name}
+                  onAccept={() => {
+                    // Keep change — no-op
+                    toast.success(`${name} confirmado`);
+                  }}
+                  onReject={() => {
+                    onResetFile(name);
+                    toast.info(`${name} restaurado`);
+                  }}
+                />
+              );
+            })}
+          </div>
+        </ScrollArea>
+
+        <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-border">
+          <Button variant="outline" onClick={onClose}>Cancelar</Button>
+          <Button onClick={onConfirmDownload}>
+            <Archive className="w-4 h-4 mr-1.5" />
+            Confirmar e Baixar ZIP
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -319,6 +428,8 @@ export function ExtensionPage() {
 
   const [zipping, setZipping] = useState(false);
   const [editedFiles, setEditedFiles] = useState<Record<string, string>>({});
+  const [originalContents, setOriginalContents] = useState<Record<string, string>>({});
+  const [showReview, setShowReview] = useState(false);
 
   const handleSaveFile = useCallback((name: string, content: string) => {
     setEditedFiles((prev) => ({ ...prev, [name]: content }));
@@ -332,12 +443,15 @@ export function ExtensionPage() {
     });
   }, []);
 
+  const handleOriginalLoaded = useCallback((name: string, content: string) => {
+    setOriginalContents((prev) => ({ ...prev, [name]: content }));
+  }, []);
+
   const editedCount = Object.keys(editedFiles).length;
 
   const handleDownloadAll = () => {
     extensionFiles.forEach((file) => {
       if (file.name in editedFiles) {
-        // Download edited version
         const blob = new Blob([editedFiles[file.name]], { type: "text/plain" });
         saveAs(blob, file.name);
       } else {
@@ -351,12 +465,12 @@ export function ExtensionPage() {
 
   const handleDownloadZip = async () => {
     setZipping(true);
+    setShowReview(false);
     try {
       const zip = new JSZip();
       await Promise.all(
         extensionFiles.map(async (file) => {
           if (file.name in editedFiles) {
-            // Use edited content
             zip.file(file.name, editedFiles[file.name]);
           } else {
             const res = await fetch(file.path);
@@ -375,8 +489,26 @@ export function ExtensionPage() {
     setZipping(false);
   };
 
+  const handleZipClick = () => {
+    if (editedCount > 0) {
+      setShowReview(true);
+    } else {
+      handleDownloadZip();
+    }
+  };
+
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
+      {showReview && (
+        <DiffReviewModal
+          editedFiles={editedFiles}
+          originalContents={originalContents}
+          onClose={() => setShowReview(false)}
+          onConfirmDownload={handleDownloadZip}
+          onResetFile={handleResetFile}
+        />
+      )}
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Extensão V8 App</h1>
@@ -390,9 +522,9 @@ export function ExtensionPage() {
               {editedCount} editado(s)
             </Badge>
           )}
-          <Button onClick={handleDownloadZip} size="sm" disabled={zipping}>
+          <Button onClick={handleZipClick} size="sm" disabled={zipping}>
             <Archive className="w-4 h-4 mr-1.5" />
-            {zipping ? "Gerando..." : "Baixar ZIP"}
+            {zipping ? "Gerando..." : editedCount > 0 ? "Revisar & Baixar ZIP" : "Baixar ZIP"}
           </Button>
           <Button onClick={handleDownloadAll} size="sm" variant="outline">
             <Download className="w-4 h-4 mr-1.5" />
@@ -438,18 +570,19 @@ export function ExtensionPage() {
           <TabsTrigger value="image">Imagens ({imageFiles.length})</TabsTrigger>
         </TabsList>
         <TabsContent value="all" className="mt-4">
-          <FileList files={extensionFiles} editedFiles={editedFiles} onSave={handleSaveFile} onReset={handleResetFile} />
+          <FileList files={extensionFiles} editedFiles={editedFiles} originalContents={originalContents} onSave={handleSaveFile} onReset={handleResetFile} onOriginalLoaded={handleOriginalLoaded} />
         </TabsContent>
         <TabsContent value="js" className="mt-4">
-          <FileList files={extensionFiles} filter="js" editedFiles={editedFiles} onSave={handleSaveFile} onReset={handleResetFile} />
+          <FileList files={extensionFiles} filter="js" editedFiles={editedFiles} originalContents={originalContents} onSave={handleSaveFile} onReset={handleResetFile} onOriginalLoaded={handleOriginalLoaded} />
         </TabsContent>
         <TabsContent value="html" className="mt-4">
-          <FileList files={extensionFiles} filter="html" editedFiles={editedFiles} onSave={handleSaveFile} onReset={handleResetFile} />
+          <FileList files={extensionFiles} filter="html" editedFiles={editedFiles} originalContents={originalContents} onSave={handleSaveFile} onReset={handleResetFile} onOriginalLoaded={handleOriginalLoaded} />
         </TabsContent>
         <TabsContent value="image" className="mt-4">
-          <FileList files={extensionFiles} filter="image" editedFiles={editedFiles} onSave={handleSaveFile} onReset={handleResetFile} />
+          <FileList files={extensionFiles} filter="image" editedFiles={editedFiles} originalContents={originalContents} onSave={handleSaveFile} onReset={handleResetFile} onOriginalLoaded={handleOriginalLoaded} />
         </TabsContent>
       </Tabs>
     </div>
   );
 }
+
