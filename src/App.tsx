@@ -11,6 +11,7 @@ import { DashboardPage } from "@/pages/DashboardPage";
 import { RepoExplorerPage } from "@/pages/RepoExplorerPage";
 import { EditorPage } from "@/pages/EditorPage";
 import { NewProjectPage } from "@/pages/NewProjectPage";
+import { ImportProjectPage } from "@/pages/ImportProjectPage";
 import { LocalEditorPage } from "@/pages/LocalEditorPage";
 import { RepoDocterPage } from "@/pages/RepoDocterPage";
 import { DeployPage } from "@/pages/DeployPage";
@@ -51,6 +52,7 @@ function AppRoutes() {
         <Route path="/repo/:owner/:name" element={<RepoExplorerPage />} />
         <Route path="/editor/:owner/:name" element={<EditorPage />} />
         <Route path="/new" element={<NewProjectPage />} />
+        <Route path="/import" element={<ImportProjectPage />} />
         <Route path="/deploy" element={<DeployPage />} />
         <Route path="/local-editor" element={<LocalEditorPage />} />
         <Route path="/repo-doctor" element={<RepoDocterPage />} />
