@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
-import { Download, FileCode, Image, FileText, Package, Eye, ChevronRight, ChevronDown, Folder, File } from "lucide-react";
+import { Download, FileCode, Image, FileText, Package, Eye, ChevronRight, ChevronDown, Folder, File, Archive } from "lucide-react";
+import JSZip from "jszip";
+import { saveAs } from "file-saver";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -190,6 +192,8 @@ export function ExtensionPage() {
   const jsonFiles = extensionFiles.filter((f) => f.type === "json");
   const imageFiles = extensionFiles.filter((f) => f.type === "image");
 
+  const [zipping, setZipping] = useState(false);
+
   const handleDownloadAll = () => {
     extensionFiles.forEach((file) => {
       const a = document.createElement("a");
@@ -197,6 +201,25 @@ export function ExtensionPage() {
       a.download = file.name;
       a.click();
     });
+  };
+
+  const handleDownloadZip = async () => {
+    setZipping(true);
+    try {
+      const zip = new JSZip();
+      await Promise.all(
+        extensionFiles.map(async (file) => {
+          const res = await fetch(file.path);
+          const blob = await res.blob();
+          zip.file(file.name, blob);
+        })
+      );
+      const content = await zip.generateAsync({ type: "blob" });
+      saveAs(content, "v8-app-extension.zip");
+    } catch (e) {
+      console.error("Erro ao gerar ZIP:", e);
+    }
+    setZipping(false);
   };
 
   return (
@@ -208,10 +231,16 @@ export function ExtensionPage() {
             Gerenciamento dos arquivos da extensão Chrome
           </p>
         </div>
-        <Button onClick={handleDownloadAll} size="sm">
-          <Download className="w-4 h-4 mr-1.5" />
-          Baixar Tudo
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={handleDownloadZip} size="sm" disabled={zipping}>
+            <Archive className="w-4 h-4 mr-1.5" />
+            {zipping ? "Gerando..." : "Baixar ZIP"}
+          </Button>
+          <Button onClick={handleDownloadAll} size="sm" variant="outline">
+            <Download className="w-4 h-4 mr-1.5" />
+            Baixar Individual
+          </Button>
+        </div>
       </div>
 
       <ManifestInfo />
