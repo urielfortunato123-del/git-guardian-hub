@@ -1,18 +1,19 @@
-import { useState, useEffect } from "react";
-import { Download, FileCode, Image, FileText, Package, Eye, ChevronRight, ChevronDown, Folder, File, Archive } from "lucide-react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { Download, FileCode, Image, FileText, Package, Eye, ChevronRight, ChevronDown, File, Archive, Pencil, RotateCcw, Save } from "lucide-react";
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
+import Editor from "@monaco-editor/react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { toast } from "sonner";
 
 interface ExtensionFile {
   name: string;
   path: string;
   type: "js" | "html" | "json" | "image" | "other";
-  size?: string;
 }
 
 const extensionFiles: ExtensionFile[] = [
@@ -40,12 +41,12 @@ const extensionFiles: ExtensionFile[] = [
   { name: "mic.png", path: "/extension/mic.png", type: "image" },
 ];
 
-const fileTypeConfig: Record<string, { icon: typeof FileCode; color: string; label: string }> = {
-  js: { icon: FileCode, color: "text-yellow-500", label: "JavaScript" },
-  html: { icon: FileText, color: "text-orange-500", label: "HTML" },
-  json: { icon: FileText, color: "text-green-500", label: "JSON" },
-  image: { icon: Image, color: "text-blue-500", label: "Imagem" },
-  other: { icon: File, color: "text-muted-foreground", label: "Outro" },
+const fileTypeConfig: Record<string, { icon: typeof FileCode; color: string; label: string; lang: string }> = {
+  js: { icon: FileCode, color: "text-yellow-500", label: "JavaScript", lang: "javascript" },
+  html: { icon: FileText, color: "text-orange-500", label: "HTML", lang: "html" },
+  json: { icon: FileText, color: "text-green-500", label: "JSON", lang: "json" },
+  image: { icon: Image, color: "text-blue-500", label: "Imagem", lang: "" },
+  other: { icon: File, color: "text-muted-foreground", label: "Outro", lang: "plaintext" },
 };
 
 function ManifestInfo() {
@@ -103,23 +104,36 @@ function ManifestInfo() {
   );
 }
 
-function FileViewer({ file }: { file: ExtensionFile }) {
-  const [content, setContent] = useState<string | null>(null);
+// ─── Inline Editor ───
+function InlineEditor({
+  file,
+  editedFiles,
+  onSave,
+  onReset,
+}: {
+  file: ExtensionFile;
+  editedFiles: Record<string, string>;
+  onSave: (name: string, content: string) => void;
+  onReset: (name: string) => void;
+}) {
+  const [originalContent, setOriginalContent] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const editorValueRef = useRef<string>("");
 
-  const loadContent = async () => {
-    if (content !== null) return;
+  const loadContent = useCallback(async () => {
+    if (originalContent !== null) return;
     setLoading(true);
     try {
       const res = await fetch(file.path);
       const text = await res.text();
-      // Truncate very large files for display
-      setContent(text.length > 50000 ? text.slice(0, 50000) + "\n\n// ... truncado ..." : text);
+      setOriginalContent(text);
+      editorValueRef.current = editedFiles[file.name] ?? text;
     } catch {
-      setContent("// Erro ao carregar arquivo");
+      setOriginalContent("// Erro ao carregar arquivo");
     }
     setLoading(false);
-  };
+  }, [file.path, file.name, originalContent, editedFiles]);
 
   if (file.type === "image") {
     return (
@@ -129,25 +143,123 @@ function FileViewer({ file }: { file: ExtensionFile }) {
     );
   }
 
-  return (
-    <div>
-      {content === null ? (
+  const isEdited = file.name in editedFiles;
+  const config = fileTypeConfig[file.type];
+  const displayContent = editedFiles[file.name] ?? originalContent;
+
+  if (originalContent === null) {
+    return (
+      <div className="flex gap-2">
         <Button variant="outline" size="sm" onClick={loadContent} disabled={loading}>
           <Eye className="w-3.5 h-3.5 mr-1.5" />
           {loading ? "Carregando..." : "Visualizar"}
         </Button>
-      ) : (
-        <ScrollArea className="h-[300px] rounded-md border bg-muted/30">
-          <pre className="p-3 text-xs font-mono whitespace-pre-wrap break-all text-foreground">
-            {content}
-          </pre>
-        </ScrollArea>
-      )}
+      </div>
+    );
+  }
+
+  if (editing) {
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 justify-end">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setEditing(false);
+            }}
+          >
+            Cancelar
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => {
+              onSave(file.name, editorValueRef.current);
+              setEditing(false);
+              toast.success(`${file.name} salvo (em memória)`);
+            }}
+          >
+            <Save className="w-3.5 h-3.5 mr-1.5" />
+            Salvar
+          </Button>
+        </div>
+        <div className="border border-border rounded-md overflow-hidden">
+          <Editor
+            height="400px"
+            defaultLanguage={config.lang}
+            defaultValue={displayContent ?? ""}
+            theme="vs-dark"
+            onChange={(value) => {
+              editorValueRef.current = value ?? "";
+            }}
+            options={{
+              minimap: { enabled: false },
+              fontSize: 12,
+              lineNumbers: "on",
+              scrollBeyondLastLine: false,
+              wordWrap: "on",
+              tabSize: 2,
+              automaticLayout: true,
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2 justify-end">
+        {isEdited && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="text-destructive"
+            onClick={() => {
+              onReset(file.name);
+              editorValueRef.current = originalContent;
+              toast.info(`${file.name} restaurado ao original`);
+            }}
+          >
+            <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
+            Restaurar
+          </Button>
+        )}
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => {
+            editorValueRef.current = displayContent ?? "";
+            setEditing(true);
+          }}
+        >
+          <Pencil className="w-3.5 h-3.5 mr-1.5" />
+          Editar
+        </Button>
+      </div>
+      <ScrollArea className="h-[300px] rounded-md border bg-muted/30">
+        <pre className="p-3 text-xs font-mono whitespace-pre-wrap break-all text-foreground">
+          {displayContent}
+        </pre>
+      </ScrollArea>
     </div>
   );
 }
 
-function FileList({ files, filter }: { files: ExtensionFile[]; filter?: string }) {
+// ─── File List ───
+function FileList({
+  files,
+  filter,
+  editedFiles,
+  onSave,
+  onReset,
+}: {
+  files: ExtensionFile[];
+  filter?: string;
+  editedFiles: Record<string, string>;
+  onSave: (name: string, content: string) => void;
+  onReset: (name: string) => void;
+}) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const filtered = filter ? files.filter((f) => f.type === filter) : files;
 
@@ -157,6 +269,7 @@ function FileList({ files, filter }: { files: ExtensionFile[]; filter?: string }
         const config = fileTypeConfig[file.type];
         const Icon = config.icon;
         const isOpen = expanded === file.name;
+        const isEdited = file.name in editedFiles;
 
         return (
           <div key={file.name} className="border border-border rounded-md overflow-hidden">
@@ -171,13 +284,23 @@ function FileList({ files, filter }: { files: ExtensionFile[]; filter?: string }
               )}
               <Icon className={`w-4 h-4 ${config.color}`} />
               <span className="text-sm font-medium flex-1">{file.name}</span>
+              {isEdited && (
+                <Badge className="text-[10px] bg-primary/20 text-primary border-primary/30">
+                  Editado
+                </Badge>
+              )}
               <Badge variant="outline" className="text-[10px]">
                 {config.label}
               </Badge>
             </button>
             {isOpen && (
               <div className="px-3 pb-3 border-t border-border pt-2">
-                <FileViewer file={file} />
+                <InlineEditor
+                  file={file}
+                  editedFiles={editedFiles}
+                  onSave={onSave}
+                  onReset={onReset}
+                />
               </div>
             )}
           </div>
@@ -187,6 +310,7 @@ function FileList({ files, filter }: { files: ExtensionFile[]; filter?: string }
   );
 }
 
+// ─── Main Page ───
 export function ExtensionPage() {
   const jsFiles = extensionFiles.filter((f) => f.type === "js");
   const htmlFiles = extensionFiles.filter((f) => f.type === "html");
@@ -194,13 +318,34 @@ export function ExtensionPage() {
   const imageFiles = extensionFiles.filter((f) => f.type === "image");
 
   const [zipping, setZipping] = useState(false);
+  const [editedFiles, setEditedFiles] = useState<Record<string, string>>({});
+
+  const handleSaveFile = useCallback((name: string, content: string) => {
+    setEditedFiles((prev) => ({ ...prev, [name]: content }));
+  }, []);
+
+  const handleResetFile = useCallback((name: string) => {
+    setEditedFiles((prev) => {
+      const next = { ...prev };
+      delete next[name];
+      return next;
+    });
+  }, []);
+
+  const editedCount = Object.keys(editedFiles).length;
 
   const handleDownloadAll = () => {
     extensionFiles.forEach((file) => {
-      const a = document.createElement("a");
-      a.href = file.path;
-      a.download = file.name;
-      a.click();
+      if (file.name in editedFiles) {
+        // Download edited version
+        const blob = new Blob([editedFiles[file.name]], { type: "text/plain" });
+        saveAs(blob, file.name);
+      } else {
+        const a = document.createElement("a");
+        a.href = file.path;
+        a.download = file.name;
+        a.click();
+      }
     });
   };
 
@@ -210,15 +355,22 @@ export function ExtensionPage() {
       const zip = new JSZip();
       await Promise.all(
         extensionFiles.map(async (file) => {
-          const res = await fetch(file.path);
-          const blob = await res.blob();
-          zip.file(file.name, blob);
+          if (file.name in editedFiles) {
+            // Use edited content
+            zip.file(file.name, editedFiles[file.name]);
+          } else {
+            const res = await fetch(file.path);
+            const blob = await res.blob();
+            zip.file(file.name, blob);
+          }
         })
       );
       const content = await zip.generateAsync({ type: "blob" });
       saveAs(content, "v8-app-extension.zip");
+      toast.success("ZIP gerado com sucesso!" + (editedCount > 0 ? ` (${editedCount} arquivo(s) editado(s))` : ""));
     } catch (e) {
       console.error("Erro ao gerar ZIP:", e);
+      toast.error("Erro ao gerar ZIP");
     }
     setZipping(false);
   };
@@ -232,7 +384,12 @@ export function ExtensionPage() {
             Gerenciamento dos arquivos da extensão Chrome
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          {editedCount > 0 && (
+            <Badge className="bg-primary/20 text-primary border-primary/30 mr-1">
+              {editedCount} editado(s)
+            </Badge>
+          )}
           <Button onClick={handleDownloadZip} size="sm" disabled={zipping}>
             <Archive className="w-4 h-4 mr-1.5" />
             {zipping ? "Gerando..." : "Baixar ZIP"}
@@ -281,16 +438,16 @@ export function ExtensionPage() {
           <TabsTrigger value="image">Imagens ({imageFiles.length})</TabsTrigger>
         </TabsList>
         <TabsContent value="all" className="mt-4">
-          <FileList files={extensionFiles} />
+          <FileList files={extensionFiles} editedFiles={editedFiles} onSave={handleSaveFile} onReset={handleResetFile} />
         </TabsContent>
         <TabsContent value="js" className="mt-4">
-          <FileList files={extensionFiles} filter="js" />
+          <FileList files={extensionFiles} filter="js" editedFiles={editedFiles} onSave={handleSaveFile} onReset={handleResetFile} />
         </TabsContent>
         <TabsContent value="html" className="mt-4">
-          <FileList files={extensionFiles} filter="html" />
+          <FileList files={extensionFiles} filter="html" editedFiles={editedFiles} onSave={handleSaveFile} onReset={handleResetFile} />
         </TabsContent>
         <TabsContent value="image" className="mt-4">
-          <FileList files={extensionFiles} filter="image" />
+          <FileList files={extensionFiles} filter="image" editedFiles={editedFiles} onSave={handleSaveFile} onReset={handleResetFile} />
         </TabsContent>
       </Tabs>
     </div>
