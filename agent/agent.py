@@ -510,8 +510,10 @@ from project_analyzer import analyze_project as _analyze_project
 from code_generator import (
     recreate_project as _recreate_project,
     get_llm_config,
+    call_llm,
     GENERATED_ROOT,
 )
+from runner import run_project as _run_project, build_installer as _build_installer
 
 
 class AnalyzeReq(BaseModel):
@@ -522,8 +524,15 @@ class RecreateReq(BaseModel):
     output_name: Optional[str] = None
 
 class RunProjectReq(BaseModel):
-    project_id: str  # ID in generated_projects
-    mode: str = "auto"  # "auto", "docker", "npm", "python"
+    project_id: str
+    mode: str = "auto"
+
+class BuildInstallerReq(BaseModel):
+    project_id: str
+    target: str = "auto"
+
+class AutoFixReq(BaseModel):
+    project_id: str
 
 class LLMConfigReq(BaseModel):
     provider: str = "ollama"
@@ -585,35 +594,98 @@ def genlab_run(req: RunProjectReq):
         raise HTTPException(400, "Invalid project id")
     if not project_dir.exists():
         raise HTTPException(404, "Generated project not found")
+    return _run_project(project_dir, req.mode)
 
-    mode = req.mode
+
+@app.post("/v1/genlab/build-installer")
+def genlab_build_installer(req: BuildInstallerReq):
+    """Gera instalador (.exe/.dmg/AppImage) para o projeto."""
+    project_dir = (GENERATED_ROOT / req.project_id).resolve()
+    if not str(project_dir).startswith(str(GENERATED_ROOT.resolve())):
+        raise HTTPException(400, "Invalid project id")
+    if not project_dir.exists():
+        raise HTTPException(404, "Generated project not found")
+    return _build_installer(project_dir, req.target)
+
+
+@app.post("/v1/genlab/auto-fix")
+def genlab_auto_fix(req: AutoFixReq):
+    """Detecta erros e corrige automaticamente usando IA."""
+    project_dir = (GENERATED_ROOT / req.project_id).resolve()
+    if not str(project_dir).startswith(str(GENERATED_ROOT.resolve())):
+        raise HTTPException(400, "Invalid project id")
+    if not project_dir.exists():
+        raise HTTPException(404, "Generated project not found")
+
+    errors_found = []
+    fixes_applied = 0
     logs = ""
 
+    # 1. Try to build/lint and collect errors
     try:
-        if mode == "auto":
-            # Auto-detect best run mode
-            if (project_dir / "docker-compose.yml").exists() or (project_dir / "docker-compose.yaml").exists():
-                mode = "docker"
-            elif (project_dir / "package.json").exists():
-                mode = "npm"
-            elif (project_dir / "requirements.txt").exists() or (project_dir / "main.py").exists():
-                mode = "python"
-            else:
-                raise HTTPException(400, "Cannot auto-detect run mode")
-
-        if mode == "docker":
-            logs = run_cmd(["docker", "compose", "up", "--build", "-d"], cwd=project_dir, timeout=300)
-        elif mode == "npm":
-            logs = run_cmd(["bash", "-lc", "npm install && npm run dev &"], cwd=project_dir, timeout=120)
-        elif mode == "python":
-            entry = "main.py" if (project_dir / "main.py").exists() else "app.py"
-            logs = run_cmd(["bash", "-lc", f"python3 -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt 2>/dev/null; python {entry} &"], cwd=project_dir, timeout=120)
-        else:
-            raise HTTPException(400, f"Unknown mode: {mode}")
-
-        return {"ok": True, "mode": mode, "logs": logs[-10000:]}
+        if (project_dir / "package.json").exists():
+            try:
+                logs += run_cmd(["bash", "-lc", "npm install 2>&1"], cwd=project_dir, timeout=120)
+            except Exception as e:
+                errors_found.append(f"npm install: {str(e)[:500]}")
+            try:
+                logs += run_cmd(["bash", "-lc", "npx tsc --noEmit 2>&1 || true"], cwd=project_dir, timeout=60)
+            except Exception as e:
+                errors_found.append(f"tsc: {str(e)[:500]}")
+        elif (project_dir / "requirements.txt").exists():
+            try:
+                logs += run_cmd(["bash", "-lc", "python3 -m py_compile main.py 2>&1 || python3 -m py_compile app.py 2>&1 || true"], cwd=project_dir, timeout=30)
+            except Exception as e:
+                errors_found.append(f"python compile: {str(e)[:500]}")
     except Exception as e:
-        return {"ok": False, "mode": mode, "error": str(e), "logs": logs[-10000:]}
+        errors_found.append(str(e)[:500])
+
+    if not errors_found:
+        return {"ok": True, "fixes_applied": 0, "errors_found": [], "logs": "No errors detected!"}
+
+    # 2. Ask LLM to fix
+    error_context = "\n".join(errors_found)
+    # Read problematic files
+    source_files = []
+    for p in project_dir.rglob("*"):
+        if p.is_file() and p.stat().st_size < 50_000:
+            rel = str(p.relative_to(project_dir))
+            if any(rel.startswith(d) for d in [".git", "node_modules", ".venv", "dist"]):
+                continue
+            try:
+                source_files.append({"path": rel, "content": p.read_text(errors="ignore")})
+            except Exception:
+                continue
+            if len(source_files) >= 30:
+                break
+
+    files_context = "\n".join(f"### {f['path']}\n```\n{f['content'][:3000]}\n```" for f in source_files[:20])
+
+    fix_prompt = f"""Corrija os seguintes erros neste projeto. Retorne APENAS o JSON com os arquivos corrigidos.
+
+ERROS:
+{error_context}
+
+ARQUIVOS:
+{files_context}
+
+Responda com JSON: {{"files": [{{"path": "...", "content": "..."}}]}}
+"""
+    try:
+        response = call_llm(fix_prompt)
+        from code_generator import extract_files_json, save_generated_project
+        fixed_files = extract_files_json(response)
+        if fixed_files:
+            for f in fixed_files:
+                fp = (project_dir / f["path"]).resolve()
+                if str(fp).startswith(str(project_dir.resolve())):
+                    fp.parent.mkdir(parents=True, exist_ok=True)
+                    fp.write_text(f["content"], encoding="utf-8")
+                    fixes_applied += 1
+    except Exception as e:
+        return {"ok": False, "error": f"LLM fix failed: {e}", "errors_found": errors_found}
+
+    return {"ok": True, "fixes_applied": fixes_applied, "errors_found": errors_found, "logs": logs[-5000:]}
 
 
 @app.get("/v1/genlab/llm-config")

@@ -12,9 +12,10 @@ import { Loader2 } from "lucide-react";
 const devDelay = <T,>(p: Promise<T>, ms = 1000): Promise<T> =>
   new Promise(resolve => setTimeout(() => resolve(p), ms));
 
-// Lazy-loaded pages (with artificial delay for dev spinner testing)
+// Lazy-loaded pages
 const DashboardPage = lazy(() => devDelay(import("@/pages/DashboardPage").then(m => ({ default: m.DashboardPage }))));
 const GenLabEnginePage = lazy(() => devDelay(import("@/pages/GenLabEnginePage").then(m => ({ default: m.GenLabEnginePage }))));
+const TemplatesPage = lazy(() => devDelay(import("@/pages/TemplatesPage").then(m => ({ default: m.TemplatesPage }))));
 const RepoExplorerPage = lazy(() => devDelay(import("@/pages/RepoExplorerPage").then(m => ({ default: m.RepoExplorerPage }))));
 const EditorPage = lazy(() => devDelay(import("@/pages/EditorPage").then(m => ({ default: m.EditorPage }))));
 const NewProjectPage = lazy(() => devDelay(import("@/pages/NewProjectPage").then(m => ({ default: m.NewProjectPage }))));
@@ -47,6 +48,7 @@ function AppRoutes() {
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/genlab" element={<GenLabEnginePage />} />
+          <Route path="/templates" element={<TemplatesPage />} />
           <Route path="/repo/:owner/:name" element={<RepoExplorerPage />} />
           <Route path="/editor/:owner/:name" element={<EditorPage />} />
           <Route path="/new" element={<NewProjectPage />} />

@@ -12,6 +12,7 @@ interface AppLayoutProps {
 const navItems = [
   { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { path: "/genlab", label: "GenLab Engine", icon: FlaskConical },
+  { path: "/templates", label: "Templates", icon: Sparkles },
   { path: "/workflow", label: "Agente", icon: Workflow },
   { path: "/local-editor", label: "AI Editor", icon: Sparkles },
   { path: "/models", label: "Modelos IA", icon: Cpu },
