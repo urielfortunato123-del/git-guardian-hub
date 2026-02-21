@@ -1,16 +1,20 @@
 import { useModel } from "@/contexts/ModelContext";
-import { AI_MODELS } from "@/lib/aiModels";
-import { Check } from "lucide-react";
+import { AI_MODELS, MODEL_CATEGORIES } from "@/lib/aiModels";
+import { Check, Cloud, Monitor } from "lucide-react";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
 
 export function GlobalModelSelector() {
   const { selectedModel, setSelectedModel } = useModel();
+
+  const categories = ["cloud-free", "cloud-premium", "local"] as const;
 
   return (
     <div className="space-y-1.5">
@@ -29,21 +33,30 @@ export function GlobalModelSelector() {
             </span>
           </SelectValue>
         </SelectTrigger>
-        <SelectContent className="w-64">
-          {AI_MODELS.map((m) => (
-            <SelectItem key={m.id} value={m.id} className="text-xs">
-              <span className="flex items-center gap-1.5 w-full">
-                <span>{m.icon}</span>
-                <span className="truncate">{m.name}</span>
-              </span>
-            </SelectItem>
-          ))}
+        <SelectContent className="w-64 max-h-80">
+          {categories.map((cat) => {
+            const catModels = AI_MODELS.filter((m) => m.category === cat);
+            if (catModels.length === 0) return null;
+            return (
+              <SelectGroup key={cat}>
+                <SelectLabel className="text-[10px] text-muted-foreground">{MODEL_CATEGORIES[cat].label}</SelectLabel>
+                {catModels.map((m) => (
+                  <SelectItem key={m.id} value={m.id} className="text-xs">
+                    <span className="flex items-center gap-1.5 w-full">
+                      <span>{m.icon}</span>
+                      <span className="truncate">{m.name}</span>
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            );
+          })}
         </SelectContent>
       </Select>
 
       <div className="flex items-center gap-1.5 px-1 text-[10px] text-muted-foreground">
-        <Check className="w-3 h-3 text-primary flex-shrink-0" />
-        <span className="truncate">Local — {selectedModel.baseUrl}</span>
+        {selectedModel.isLocal ? <Monitor className="w-3 h-3 text-primary flex-shrink-0" /> : <Cloud className="w-3 h-3 text-primary flex-shrink-0" />}
+        <span className="truncate">{selectedModel.isLocal ? `Local — ${selectedModel.baseUrl}` : `Cloud — ${selectedModel.provider}`}</span>
       </div>
     </div>
   );
