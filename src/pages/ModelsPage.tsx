@@ -1,11 +1,19 @@
 import { useState } from "react";
-import { Search, Check, Cpu, Monitor, Cloud, Key, Eye, EyeOff, ExternalLink, Copy, CheckCheck, Info } from "lucide-react";
-import { motion } from "framer-motion";
+import { Check, Cpu, Monitor, Cloud, Key, Eye, EyeOff, ExternalLink, Copy, CheckCheck, Search } from "lucide-react";
 import { AI_MODELS, MODEL_CATEGORIES, type AIModel } from "@/lib/aiModels";
 import { useModel } from "@/contexts/ModelContext";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Accordion,
   AccordionContent,
@@ -124,14 +132,7 @@ function LocalSetupGuide() {
 }
 
 export function ModelsPage() {
-  const [query, setQuery] = useState("");
   const { selectedModel, setSelectedModel, openRouterApiKey } = useModel();
-
-  const filtered = AI_MODELS.filter((m) => {
-    if (!query) return true;
-    const q = query.toLowerCase();
-    return m.name.toLowerCase().includes(q) || m.provider.toLowerCase().includes(q) || m.id.toLowerCase().includes(q);
-  });
 
   const categories = ["cloud-free", "cloud-premium", "local"] as const;
 
@@ -143,94 +144,78 @@ export function ModelsPage() {
           Modelos de IA
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
-          {AI_MODELS.length} modelos disponíveis • Clique para selecionar
+          {AI_MODELS.length} modelos disponíveis
         </p>
       </div>
 
       <ApiKeySection />
-      <LocalSetupGuide />
 
-      {/* Search */}
-      <div className="relative mb-6">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Buscar modelos..."
-          className="w-full bg-card border border-border rounded-lg pl-10 pr-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition"
-        />
+      {/* Model selector dropdown */}
+      <div className="mb-6 rounded-xl border border-border bg-card p-5">
+        <div className="flex items-center gap-2 mb-3">
+          <Cpu className="w-5 h-5 text-primary" />
+          <h2 className="text-lg font-semibold text-foreground">Selecionar Modelo</h2>
+        </div>
+
+        <Select
+          value={selectedModel.id}
+          onValueChange={(id) => {
+            const m = AI_MODELS.find((m) => m.id === id);
+            if (m) setSelectedModel(m);
+          }}
+        >
+          <SelectTrigger className="w-full h-11 text-sm">
+            <SelectValue>
+              <span className="flex items-center gap-2">
+                <span>{selectedModel.icon}</span>
+                <span className="font-medium">{selectedModel.name}</span>
+                <span className="text-muted-foreground text-xs">— {selectedModel.provider}</span>
+              </span>
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent className="max-h-80">
+            {categories.map((cat) => {
+              const catModels = AI_MODELS.filter((m) => m.category === cat);
+              if (catModels.length === 0) return null;
+              return (
+                <SelectGroup key={cat}>
+                  <SelectLabel className="text-xs text-muted-foreground font-semibold">
+                    {MODEL_CATEGORIES[cat].label} — {MODEL_CATEGORIES[cat].description}
+                  </SelectLabel>
+                  {catModels.map((m) => (
+                    <SelectItem key={m.id} value={m.id} className="text-sm py-2">
+                      <span className="flex items-center gap-2 w-full">
+                        <span>{m.icon}</span>
+                        <span className="font-medium">{m.name}</span>
+                        <span className="text-muted-foreground text-xs ml-auto">{m.provider}</span>
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              );
+            })}
+          </SelectContent>
+        </Select>
+
+        {/* Selected model info */}
+        <div className="mt-3 flex items-center gap-3 flex-wrap">
+          <Badge variant="secondary" className="text-xs gap-1.5">
+            {selectedModel.isLocal ? <Monitor className="w-3.5 h-3.5" /> : <Cloud className="w-3.5 h-3.5" />}
+            {selectedModel.isLocal ? "Local" : selectedModel.category === "cloud-free" ? "Free" : "Premium"}
+          </Badge>
+          {selectedModel.category === "cloud-premium" && !openRouterApiKey && (
+            <Badge variant="outline" className="text-xs gap-1.5 text-destructive border-destructive/30">
+              <Key className="w-3.5 h-3.5" />
+              Requer API key
+            </Badge>
+          )}
+          <span className="text-[11px] text-muted-foreground font-mono">
+            {selectedModel.openRouterModel || selectedModel.baseUrl || selectedModel.id}
+          </span>
+        </div>
       </div>
 
-      {/* Models by category */}
-      {categories.map((cat) => {
-        const catModels = filtered.filter((m) => m.category === cat);
-        if (catModels.length === 0) return null;
-        const catInfo = MODEL_CATEGORIES[cat];
-
-        return (
-          <div key={cat} className="mb-8">
-            <h2 className="text-sm font-semibold text-foreground mb-1">{catInfo.label}</h2>
-            <p className="text-xs text-muted-foreground mb-3">{catInfo.description}</p>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              {catModels.map((model, i) => {
-                const isActive = selectedModel.id === model.id;
-                const needsKey = cat === "cloud-premium" && !openRouterApiKey;
-
-                return (
-                  <motion.button
-                    key={model.id}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.15, delay: i * 0.02 }}
-                    onClick={() => setSelectedModel(model)}
-                    className={`group relative text-left p-4 rounded-lg border transition-all ${
-                      isActive
-                        ? "border-primary bg-primary/5 ring-1 ring-primary/30"
-                        : "border-border bg-card hover:border-primary/40 hover:bg-secondary/50"
-                    }`}
-                  >
-                    {isActive && (
-                      <span className="absolute top-3 right-3">
-                        <Check className="w-4 h-4 text-primary" />
-                      </span>
-                    )}
-
-                    <div className="flex items-start gap-3">
-                      <span className="text-2xl">{model.icon}</span>
-                      <div className="flex-1 min-w-0">
-                        <span className="font-semibold text-sm text-foreground truncate block">{model.name}</span>
-                        <p className="text-xs text-muted-foreground">{model.provider}</p>
-
-                        <div className="flex items-center gap-2 mt-2 flex-wrap">
-                          <Badge variant="secondary" className="text-[10px] gap-1">
-                            {model.isLocal ? <Monitor className="w-3 h-3" /> : <Cloud className="w-3 h-3" />}
-                            {model.isLocal ? "Local" : cat === "cloud-free" ? "Free" : "Premium"}
-                          </Badge>
-                          {needsKey && (
-                            <Badge variant="outline" className="text-[10px] gap-1 text-destructive border-destructive/30">
-                              <Key className="w-3 h-3" />
-                              Requer API key
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <p className="text-[10px] text-muted-foreground mt-2 font-mono truncate opacity-60">{model.openRouterModel || model.id}</p>
-                  </motion.button>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })}
-
-      {filtered.length === 0 && (
-        <div className="text-center py-12 text-muted-foreground">
-          <p className="text-sm">Nenhum modelo encontrado</p>
-        </div>
-      )}
+      <LocalSetupGuide />
     </div>
   );
 }
