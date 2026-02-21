@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { ArrowLeft, FileCode, Folder, FolderOpen, ChevronRight, ChevronDown, Upload, Trash2, Download, Loader2 } from "lucide-react";
+import { ArrowLeft, FileCode, Folder, FolderOpen, ChevronRight, ChevronDown, Upload, Trash2, Download, Loader2, Layers } from "lucide-react";
 import { Link } from "react-router-dom";
 import Editor from "@monaco-editor/react";
 import JSZip from "jszip";
@@ -7,6 +7,7 @@ import { saveAs } from "file-saver";
 import { FolderUpload } from "@/components/FolderUpload";
 import { AIChat } from "@/components/AIChat";
 import { buildFileTree, type UploadedFile, type FileTreeNode } from "@/lib/fileUtils";
+import { PlatformConverter, type PlatformTarget } from "@/components/PlatformConverter";
 
 function MiniTree({ node, depth = 0, selectedPath, onSelect }: { 
   node: FileTreeNode; 
@@ -55,6 +56,9 @@ export function LocalEditorPage() {
   const [selectedPath, setSelectedPath] = useState("");
   const [showUpload, setShowUpload] = useState(true);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [showConverter, setShowConverter] = useState(false);
+  const [conversionTarget, setConversionTarget] = useState<PlatformTarget | null>(null);
+  const [isConverting, setIsConverting] = useState(false);
 
   const fileTree = buildFileTree(files);
   const selectedFile = files.find(f => f.path === selectedPath);
@@ -73,7 +77,6 @@ export function LocalEditorPage() {
       if (existing) {
         return prev.map(f => f.path === path ? { ...f, content } : f);
       }
-      // New file
       return [...prev, { path, content, language: path.split('.').pop() || 'plaintext' }];
     });
     setSelectedPath(path);
@@ -95,21 +98,14 @@ export function LocalEditorPage() {
 
   const downloadAsZip = useCallback(async () => {
     if (files.length === 0) return;
-    
     setIsDownloading(true);
     try {
       const zip = new JSZip();
-      
-      // Get the root folder name (first part of the first file's path)
       const firstPath = files[0].path;
       const rootFolder = firstPath.includes('/') ? firstPath.split('/')[0] : 'project';
-      
-      // Add all files to the zip
       for (const file of files) {
         zip.file(file.path, file.content);
       }
-      
-      // Generate and download
       const blob = await zip.generateAsync({ type: "blob" });
       saveAs(blob, `${rootFolder}-edited.zip`);
     } catch (error) {
@@ -118,6 +114,17 @@ export function LocalEditorPage() {
       setIsDownloading(false);
     }
   }, [files]);
+
+  const handleConvert = useCallback((platform: PlatformTarget) => {
+    setIsConverting(true);
+    setConversionTarget(platform);
+    setShowConverter(false);
+  }, []);
+
+  const handleConversionDone = useCallback(() => {
+    setIsConverting(false);
+    setConversionTarget(null);
+  }, []);
 
   if (showUpload) {
     return (
@@ -141,6 +148,15 @@ export function LocalEditorPage() {
 
   return (
     <div className="flex h-full">
+      {/* Platform Converter Dialog */}
+      <PlatformConverter
+        open={showConverter}
+        onOpenChange={setShowConverter}
+        onConvert={handleConvert}
+        isConverting={isConverting}
+        hasFiles={files.length > 0}
+      />
+
       {/* File tree sidebar */}
       <div className="w-56 border-r border-border bg-sidebar flex flex-col">
         <div className="h-10 flex items-center justify-between px-3 border-b border-sidebar-border">
@@ -148,6 +164,13 @@ export function LocalEditorPage() {
             {files.length} arquivos
           </span>
           <div className="flex items-center gap-1">
+            <button
+              onClick={() => setShowConverter(true)}
+              className="text-muted-foreground hover:text-primary transition-colors"
+              title="Converter para outra plataforma"
+            >
+              <Layers className="w-3.5 h-3.5" />
+            </button>
             <button 
               onClick={downloadAsZip}
               disabled={isDownloading}
@@ -183,7 +206,6 @@ export function LocalEditorPage() {
 
       {/* Editor area */}
       <div className="flex-1 flex flex-col">
-        {/* Tab bar */}
         {selectedFile && (
           <div className="h-9 flex items-center border-b border-border bg-card px-3">
             <div className="flex items-center gap-2 text-xs text-foreground">
@@ -193,7 +215,6 @@ export function LocalEditorPage() {
           </div>
         )}
 
-        {/* Monaco Editor */}
         <div className="flex-1">
           {selectedFile ? (
             <Editor
@@ -223,7 +244,12 @@ export function LocalEditorPage() {
 
       {/* AI Chat panel */}
       <div className="w-96 border-l border-border bg-card flex flex-col">
-        <AIChat files={files} onFileUpdate={handleFileUpdate} />
+        <AIChat
+          files={files}
+          onFileUpdate={handleFileUpdate}
+          conversionTarget={conversionTarget}
+          onConversionDone={handleConversionDone}
+        />
       </div>
     </div>
   );

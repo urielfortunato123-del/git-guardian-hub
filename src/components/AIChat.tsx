@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import type { UploadedFile } from "@/lib/fileUtils";
 import type { Message, Attachment } from "@/components/chat/types";
 import { ChatHeader } from "@/components/chat/ChatHeader";
@@ -9,13 +9,16 @@ import { callAIStream, processSSEStream } from "@/services/ai";
 import { useModel } from "@/contexts/ModelContext";
 import { useChatHistory } from "@/hooks/useChatHistory";
 import { Trash2, Plus, MessageSquare, X, Loader2 } from "lucide-react";
+import type { PlatformTarget } from "@/components/PlatformConverter";
 
 interface AIChatProps {
   files: UploadedFile[];
   onFileUpdate: (path: string, content: string) => void;
+  conversionTarget?: PlatformTarget | null;
+  onConversionDone?: () => void;
 }
 
-export function AIChat({ files, onFileUpdate }: AIChatProps) {
+export function AIChat({ files, onFileUpdate, conversionTarget, onConversionDone }: AIChatProps) {
   const {
     messages, setMessages, addMessage, updateLastMessage, saveLastAssistantMessage,
     clearHistory, conversations, activeConversationId,
@@ -27,7 +30,7 @@ export function AIChat({ files, onFileUpdate }: AIChatProps) {
   const [showSidebar, setShowSidebar] = useState(false);
   const dragCounterRef = useRef(0);
 
-  const buildSystemPrompt = useCallback((filesObj: Record<string, string>) => {
+  const buildSystemPrompt = useCallback((filesObj: Record<string, string>, platform?: PlatformTarget | null) => {
     let systemPrompt = `You are a senior full-stack developer integrated into LovHub. You BUILD REAL, PRODUCTION-READY applications.
 
 CRITICAL RULES:
@@ -48,9 +51,27 @@ CAPABILITIES:
 FORMAT FOR FILE EDITS:
 \`\`\`filepath:src/example.ts
 // complete file content here
-\`\`\`
+\`\`\``;
 
-CURRENT PROJECT FILES:`;
+    if (platform) {
+      systemPrompt += `
+
+PLATFORM CONVERSION MODE:
+You are converting the current project to ${platform.name} (${platform.language}).
+${platform.description}
+
+CONVERSION RULES:
+- Recreate ALL functionality from the original project for the target platform
+- Generate the COMPLETE project structure including build files, configs, manifests
+- Use idiomatic patterns and best practices for ${platform.language} and ${platform.name}
+- Preserve all business logic, UI flows, and data structures
+- Generate ALL files needed to build and run the project
+- Use the filepath format for EVERY file: \`\`\`filepath:path/to/file.ext
+- Include README.md with build instructions for the target platform
+- Do NOT skip any file — generate the COMPLETE project`;
+    }
+
+    systemPrompt += "\n\nCURRENT PROJECT FILES:";
 
     if (Object.keys(filesObj).length > 0) {
       for (const [path, content] of Object.entries(filesObj)) {
@@ -70,6 +91,15 @@ CURRENT PROJECT FILES:`;
     }
   };
 
+  // Handle platform conversion trigger
+  useEffect(() => {
+    if (conversionTarget && !isLoading) {
+      const prompt = `Converta TODO o projeto atual para ${conversionTarget.name} (${conversionTarget.language}). ${conversionTarget.description}. Recrie cada arquivo com a estrutura completa do projeto para a plataforma alvo. Inclua todos os arquivos de configuração, build, manifesto e código fonte necessários.`;
+      handleSend(prompt, []);
+      onConversionDone?.();
+    }
+  }, [conversionTarget]);
+
   const handleSend = useCallback(async (input: string, attachments: Attachment[]) => {
     const filesObj: Record<string, string> = {};
     files.forEach(f => { filesObj[f.path] = f.content; });
@@ -84,7 +114,7 @@ CURRENT PROJECT FILES:`;
     setIsLoading(true);
 
     try {
-      const systemPrompt = buildSystemPrompt(filesObj);
+      const systemPrompt = buildSystemPrompt(filesObj, conversionTarget);
       const chatMessages = [
         { role: "system", content: systemPrompt },
         ...messages.map(m => ({ role: m.role, content: m.content })),
@@ -124,7 +154,7 @@ CURRENT PROJECT FILES:`;
     } finally {
       setIsLoading(false);
     }
-  }, [files, messages, selectedModel, addMessage, updateLastMessage, saveLastAssistantMessage, buildSystemPrompt]);
+  }, [files, messages, selectedModel, conversionTarget, addMessage, updateLastMessage, saveLastAssistantMessage, buildSystemPrompt]);
 
   const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault(); e.stopPropagation();
