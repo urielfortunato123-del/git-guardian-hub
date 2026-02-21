@@ -1,6 +1,6 @@
 import { ReactNode, useState, useMemo } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { GitBranch, Plus, Rocket, LayoutDashboard, Sparkles, Stethoscope, Workflow, Cpu, Wrench, BookOpen, Puzzle, FileArchive } from "lucide-react";
+import { FlaskConical, Plus, Rocket, LayoutDashboard, Sparkles, Stethoscope, Workflow, Cpu, Wrench, BookOpen, Puzzle, FileArchive } from "lucide-react";
 import { GlobalModelSelector } from "@/components/GlobalModelSelector";
 import { QuickSearch } from "@/components/QuickSearch";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
@@ -11,6 +11,7 @@ interface AppLayoutProps {
 
 const navItems = [
   { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { path: "/genlab", label: "GenLab Engine", icon: FlaskConical },
   { path: "/workflow", label: "Agente", icon: Workflow },
   { path: "/local-editor", label: "AI Editor", icon: Sparkles },
   { path: "/models", label: "Modelos IA", icon: Cpu },
@@ -41,8 +42,8 @@ export function AppLayout({ children }: AppLayoutProps) {
       <aside className="w-56 flex-shrink-0 bg-sidebar flex flex-col border-r border-sidebar-border">
         {/* Logo */}
         <div className="h-14 flex items-center gap-2 px-4 border-b border-sidebar-border">
-          <GitBranch className="w-6 h-6 text-primary" />
-          <span className="font-bold text-lg text-foreground tracking-tight">LovHub</span>
+          <FlaskConical className="w-6 h-6 text-primary" />
+          <span className="font-bold text-lg text-foreground tracking-tight">GenLab</span>
         </div>
 
         {/* Nav */}
