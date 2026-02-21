@@ -126,6 +126,19 @@ export function LocalEditorPage() {
     setConversionTarget(null);
   }, []);
 
+  const loadExampleProject = useCallback(() => {
+    const exampleFiles: UploadedFile[] = [
+      { path: "src/App.tsx", content: `import { useState } from "react";\nimport "./App.css";\n\nfunction App() {\n  const [count, setCount] = useState(0);\n\n  return (\n    <div className="app">\n      <h1>Hello World</h1>\n      <p>Welcome to my React app!</p>\n      <div className="card">\n        <button onClick={() => setCount(c => c + 1)}>\n          Count: {count}\n        </button>\n      </div>\n    </div>\n  );\n}\n\nexport default App;`, language: "typescript" },
+      { path: "src/main.tsx", content: `import React from "react";\nimport ReactDOM from "react-dom/client";\nimport App from "./App";\nimport "./index.css";\n\nReactDOM.createRoot(document.getElementById("root")!).render(\n  <React.StrictMode>\n    <App />\n  </React.StrictMode>\n);`, language: "typescript" },
+      { path: "src/App.css", content: `.app {\n  text-align: center;\n  padding: 2rem;\n}\n\n.card {\n  margin-top: 1rem;\n}\n\nbutton {\n  padding: 0.5rem 1rem;\n  font-size: 1rem;\n  border-radius: 8px;\n  border: 1px solid #646cff;\n  background: #1a1a2e;\n  color: #fff;\n  cursor: pointer;\n}\n\nbutton:hover {\n  background: #646cff;\n}`, language: "css" },
+      { path: "src/index.css", content: `body {\n  margin: 0;\n  font-family: -apple-system, sans-serif;\n  background: #0f0f1a;\n  color: #fff;\n}`, language: "css" },
+      { path: "package.json", content: `{\n  "name": "hello-react",\n  "version": "1.0.0",\n  "scripts": {\n    "dev": "vite",\n    "build": "vite build"\n  },\n  "dependencies": {\n    "react": "^18.3.1",\n    "react-dom": "^18.3.1"\n  },\n  "devDependencies": {\n    "@vitejs/plugin-react": "^4.0.0",\n    "vite": "^5.0.0"\n  }\n}`, language: "json" },
+      { path: "index.html", content: `<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8" />\n  <meta name="viewport" content="width=device-width, initial-scale=1.0" />\n  <title>Hello React</title>\n</head>\n<body>\n  <div id="root"></div>\n  <script type="module" src="/src/main.tsx"></script>\n</body>\n</html>`, language: "html" },
+      { path: "vite.config.ts", content: `import { defineConfig } from "vite";\nimport react from "@vitejs/plugin-react";\n\nexport default defineConfig({\n  plugins: [react()],\n});`, language: "typescript" },
+    ];
+    handleFilesLoaded(exampleFiles);
+  }, [handleFilesLoaded]);
+
   if (showUpload) {
     return (
       <div className="h-full flex items-center justify-center p-8">
@@ -138,6 +151,13 @@ export function LocalEditorPage() {
             </p>
           </div>
           <FolderUpload onFilesLoaded={handleFilesLoaded} />
+          <button
+            onClick={loadExampleProject}
+            className="w-full mt-3 py-2.5 px-4 rounded-lg border border-border bg-secondary/50 hover:bg-secondary text-sm text-foreground font-medium transition-colors flex items-center justify-center gap-2"
+          >
+            <FileCode className="w-4 h-4 text-primary" />
+            Criar projeto de exemplo (Hello React)
+          </button>
           <Link to="/dashboard" className="flex items-center justify-center gap-2 text-sm text-muted-foreground hover:text-foreground mt-6 transition-colors">
             <ArrowLeft className="w-4 h-4" /> Voltar ao Dashboard
           </Link>
