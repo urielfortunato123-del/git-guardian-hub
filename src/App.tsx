@@ -8,21 +8,25 @@ import { ModelProvider } from "@/contexts/ModelContext";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Loader2 } from "lucide-react";
 
-// Lazy-loaded pages
-const DashboardPage = lazy(() => import("@/pages/DashboardPage").then(m => ({ default: m.DashboardPage })));
-const RepoExplorerPage = lazy(() => import("@/pages/RepoExplorerPage").then(m => ({ default: m.RepoExplorerPage })));
-const EditorPage = lazy(() => import("@/pages/EditorPage").then(m => ({ default: m.EditorPage })));
-const NewProjectPage = lazy(() => import("@/pages/NewProjectPage").then(m => ({ default: m.NewProjectPage })));
-const ImportProjectPage = lazy(() => import("@/pages/ImportProjectPage").then(m => ({ default: m.ImportProjectPage })));
-const LocalEditorPage = lazy(() => import("@/pages/LocalEditorPage").then(m => ({ default: m.LocalEditorPage })));
-const RepoDocterPage = lazy(() => import("@/pages/RepoDocterPage").then(m => ({ default: m.RepoDocterPage })));
-const DeployPage = lazy(() => import("@/pages/DeployPage").then(m => ({ default: m.DeployPage })));
-const WorkflowPage = lazy(() => import("@/pages/WorkflowPage").then(m => ({ default: m.WorkflowPage })));
-const ModelsPage = lazy(() => import("@/pages/ModelsPage").then(m => ({ default: m.ModelsPage })));
-const SelfImprovePage = lazy(() => import("@/pages/SelfImprovePage").then(m => ({ default: m.SelfImprovePage })));
-const GuidePage = lazy(() => import("@/pages/GuidePage").then(m => ({ default: m.GuidePage })));
-const ExtensionPage = lazy(() => import("@/pages/ExtensionPage").then(m => ({ default: m.ExtensionPage })));
-const NotFound = lazy(() => import("@/pages/NotFound"));
+// Dev delay helper — remove in production
+const devDelay = <T,>(p: Promise<T>, ms = 1000): Promise<T> =>
+  new Promise(resolve => setTimeout(() => resolve(p), ms));
+
+// Lazy-loaded pages (with artificial delay for dev spinner testing)
+const DashboardPage = lazy(() => devDelay(import("@/pages/DashboardPage").then(m => ({ default: m.DashboardPage }))));
+const RepoExplorerPage = lazy(() => devDelay(import("@/pages/RepoExplorerPage").then(m => ({ default: m.RepoExplorerPage }))));
+const EditorPage = lazy(() => devDelay(import("@/pages/EditorPage").then(m => ({ default: m.EditorPage }))));
+const NewProjectPage = lazy(() => devDelay(import("@/pages/NewProjectPage").then(m => ({ default: m.NewProjectPage }))));
+const ImportProjectPage = lazy(() => devDelay(import("@/pages/ImportProjectPage").then(m => ({ default: m.ImportProjectPage }))));
+const LocalEditorPage = lazy(() => devDelay(import("@/pages/LocalEditorPage").then(m => ({ default: m.LocalEditorPage }))));
+const RepoDocterPage = lazy(() => devDelay(import("@/pages/RepoDocterPage").then(m => ({ default: m.RepoDocterPage }))));
+const DeployPage = lazy(() => devDelay(import("@/pages/DeployPage").then(m => ({ default: m.DeployPage }))));
+const WorkflowPage = lazy(() => devDelay(import("@/pages/WorkflowPage").then(m => ({ default: m.WorkflowPage }))));
+const ModelsPage = lazy(() => devDelay(import("@/pages/ModelsPage").then(m => ({ default: m.ModelsPage }))));
+const SelfImprovePage = lazy(() => devDelay(import("@/pages/SelfImprovePage").then(m => ({ default: m.SelfImprovePage }))));
+const GuidePage = lazy(() => devDelay(import("@/pages/GuidePage").then(m => ({ default: m.GuidePage }))));
+const ExtensionPage = lazy(() => devDelay(import("@/pages/ExtensionPage").then(m => ({ default: m.ExtensionPage }))));
+const NotFound = lazy(() => devDelay(import("@/pages/NotFound")));
 
 const queryClient = new QueryClient();
 
