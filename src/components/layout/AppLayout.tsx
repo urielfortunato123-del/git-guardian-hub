@@ -1,7 +1,9 @@
-import { ReactNode } from "react";
+import { ReactNode, useState, useMemo } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { GitBranch, Plus, Rocket, LayoutDashboard, Sparkles, Stethoscope, Workflow, Cpu, Wrench, BookOpen, Puzzle, FileArchive } from "lucide-react";
 import { GlobalModelSelector } from "@/components/GlobalModelSelector";
+import { QuickSearch } from "@/components/QuickSearch";
+import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -23,9 +25,18 @@ const navItems = [
 
 export function AppLayout({ children }: AppLayoutProps) {
   const location = useLocation();
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  const shortcuts = useMemo(() => [
+    { key: "k", ctrl: true, handler: () => setSearchOpen(true) },
+  ], []);
+
+  useKeyboardShortcuts(shortcuts);
 
   return (
     <div className="flex h-screen overflow-hidden">
+      <QuickSearch open={searchOpen} onOpenChange={setSearchOpen} />
+
       {/* Sidebar */}
       <aside className="w-56 flex-shrink-0 bg-sidebar flex flex-col border-r border-sidebar-border">
         {/* Logo */}
@@ -54,6 +65,15 @@ export function AppLayout({ children }: AppLayoutProps) {
             );
           })}
         </nav>
+
+        {/* Search hint */}
+        <button
+          onClick={() => setSearchOpen(true)}
+          className="mx-3 mb-2 flex items-center gap-2 px-3 py-2 rounded-md text-xs text-muted-foreground hover:bg-sidebar-accent hover:text-foreground transition-colors border border-border/50"
+        >
+          <span className="flex-1 text-left">Buscar...</span>
+          <kbd className="text-[10px] px-1.5 py-0.5 bg-secondary rounded border border-border font-mono">⌘K</kbd>
+        </button>
 
         {/* Global Model Selector + Settings */}
         <div className="px-3 pt-3 pb-3">

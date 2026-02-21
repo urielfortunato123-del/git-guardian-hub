@@ -35,6 +35,11 @@ export function ChatInput({ onSend, isLoading, isDragging, onDragEnter, onDragLe
       e.preventDefault();
       handleSend();
     }
+    // Ctrl+Enter also sends
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      handleSend();
+    }
   };
 
   return (
