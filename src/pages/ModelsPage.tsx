@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Check, Cpu, Monitor, Cloud, Key, Eye, EyeOff, ExternalLink, Copy, CheckCheck, Search } from "lucide-react";
 import { AI_MODELS, MODEL_CATEGORIES, type AIModel } from "@/lib/aiModels";
 import { useModel } from "@/contexts/ModelContext";
+import { useLocalModelStatus } from "@/hooks/useLocalModelStatus";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -134,6 +135,9 @@ function LocalSetupGuide() {
 export function ModelsPage() {
   const { selectedModel, setSelectedModel, openRouterApiKey } = useModel();
 
+  const localEndpoints = useMemo(() => AI_MODELS.filter((m) => m.isLocal).map((m) => m.baseUrl), []);
+  const localStatuses = useLocalModelStatus(localEndpoints);
+
   const categories = ["cloud-free", "cloud-premium", "local"] as const;
 
   return (
@@ -182,15 +186,21 @@ export function ModelsPage() {
                   <SelectLabel className="text-xs text-muted-foreground font-semibold">
                     {MODEL_CATEGORIES[cat].label} — {MODEL_CATEGORIES[cat].description}
                   </SelectLabel>
-                  {catModels.map((m) => (
-                    <SelectItem key={m.id} value={m.id} className="text-sm py-2">
-                      <span className="flex items-center gap-2 w-full">
-                        <span>{m.icon}</span>
-                        <span className="font-medium">{m.name}</span>
-                        <span className="text-muted-foreground text-xs ml-auto">{m.provider}</span>
-                      </span>
-                    </SelectItem>
-                  ))}
+                  {catModels.map((m) => {
+                    const isOnline = m.isLocal ? localStatuses[m.baseUrl] : undefined;
+                    return (
+                      <SelectItem key={m.id} value={m.id} className="text-sm py-2">
+                        <span className="flex items-center gap-2 w-full">
+                          <span>{m.icon}</span>
+                          <span className="font-medium">{m.name}</span>
+                          {m.isLocal && (
+                            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isOnline ? "bg-green-500" : "bg-muted-foreground/40"}`} title={isOnline ? "Online" : "Offline"} />
+                          )}
+                          <span className="text-muted-foreground text-xs ml-auto">{m.provider}</span>
+                        </span>
+                      </SelectItem>
+                    );
+                  })}
                 </SelectGroup>
               );
             })}
@@ -203,6 +213,12 @@ export function ModelsPage() {
             {selectedModel.isLocal ? <Monitor className="w-3.5 h-3.5" /> : <Cloud className="w-3.5 h-3.5" />}
             {selectedModel.isLocal ? "Local" : selectedModel.category === "cloud-free" ? "Free" : "Premium"}
           </Badge>
+          {selectedModel.isLocal && (
+            <Badge variant={localStatuses[selectedModel.baseUrl] ? "secondary" : "outline"} className="text-xs gap-1.5">
+              <span className={`w-2 h-2 rounded-full ${localStatuses[selectedModel.baseUrl] ? "bg-green-500" : "bg-destructive"}`} />
+              {localStatuses[selectedModel.baseUrl] ? "Online" : "Offline"}
+            </Badge>
+          )}
           {selectedModel.category === "cloud-premium" && !openRouterApiKey && (
             <Badge variant="outline" className="text-xs gap-1.5 text-destructive border-destructive/30">
               <Key className="w-3.5 h-3.5" />
