@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { useModel } from "@/contexts/ModelContext";
 import { AI_MODELS, MODEL_CATEGORIES } from "@/lib/aiModels";
 import { useLocalModelStatus } from "@/hooks/useLocalModelStatus";
-import { Cloud, Monitor } from "lucide-react";
+import { Cloud, RefreshCw } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -17,7 +17,7 @@ export function GlobalModelSelector() {
   const { selectedModel, setSelectedModel } = useModel();
 
   const localEndpoints = useMemo(() => AI_MODELS.filter((m) => m.isLocal).map((m) => m.baseUrl), []);
-  const localStatuses = useLocalModelStatus(localEndpoints);
+  const { statuses: localStatuses, checking, retry } = useLocalModelStatus(localEndpoints);
 
   const categories = ["cloud-free", "cloud-premium", "local"] as const;
 
@@ -70,6 +70,11 @@ export function GlobalModelSelector() {
           <>
             <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${localStatuses[selectedModel.baseUrl] ? "bg-green-500" : "bg-destructive"}`} />
             <span className="truncate">{localStatuses[selectedModel.baseUrl] ? "Online" : "Offline"} — {selectedModel.baseUrl}</span>
+            {!localStatuses[selectedModel.baseUrl] && (
+              <button onClick={retry} disabled={checking} className="ml-auto flex-shrink-0 text-muted-foreground hover:text-foreground" title="Reconectar">
+                <RefreshCw className={`w-2.5 h-2.5 ${checking ? "animate-spin" : ""}`} />
+              </button>
+            )}
           </>
         ) : (
           <>

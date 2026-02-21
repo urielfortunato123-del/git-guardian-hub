@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Check, Cpu, Monitor, Cloud, Key, Eye, EyeOff, ExternalLink, Copy, CheckCheck, Search } from "lucide-react";
+import { Check, Cpu, Monitor, Cloud, Key, Eye, EyeOff, ExternalLink, Copy, CheckCheck, Search, RefreshCw } from "lucide-react";
 import { AI_MODELS, MODEL_CATEGORIES, type AIModel } from "@/lib/aiModels";
 import { useModel } from "@/contexts/ModelContext";
 import { useLocalModelStatus } from "@/hooks/useLocalModelStatus";
@@ -136,7 +136,7 @@ export function ModelsPage() {
   const { selectedModel, setSelectedModel, openRouterApiKey } = useModel();
 
   const localEndpoints = useMemo(() => AI_MODELS.filter((m) => m.isLocal).map((m) => m.baseUrl), []);
-  const localStatuses = useLocalModelStatus(localEndpoints);
+  const { statuses: localStatuses, checking, retry } = useLocalModelStatus(localEndpoints);
 
   const categories = ["cloud-free", "cloud-premium", "local"] as const;
 
@@ -218,6 +218,12 @@ export function ModelsPage() {
               <span className={`w-2 h-2 rounded-full ${localStatuses[selectedModel.baseUrl] ? "bg-green-500" : "bg-destructive"}`} />
               {localStatuses[selectedModel.baseUrl] ? "Online" : "Offline"}
             </Badge>
+          )}
+          {selectedModel.isLocal && !localStatuses[selectedModel.baseUrl] && (
+            <Button variant="ghost" size="sm" className="h-6 px-2 text-xs gap-1" onClick={retry} disabled={checking}>
+              <RefreshCw className={`w-3 h-3 ${checking ? "animate-spin" : ""}`} />
+              {checking ? "Verificando..." : "Reconectar"}
+            </Button>
           )}
           {selectedModel.category === "cloud-premium" && !openRouterApiKey && (
             <Badge variant="outline" className="text-xs gap-1.5 text-destructive border-destructive/30">
