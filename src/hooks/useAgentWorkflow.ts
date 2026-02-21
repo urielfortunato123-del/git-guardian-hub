@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { AI_MODELS } from "@/lib/aiModels";
+import { callAI, callAIStream, processSSEStream, extractJSON } from "@/services/ai";
 
 export interface AnalysisResult {
   stack?: { type: string; framework: string; language: string; buildTool: string; packageManager: string };
@@ -45,79 +45,6 @@ export interface FileData {
 }
 
 type WorkflowStep = "select" | "analyze" | "plan" | "patch" | "apply" | "done";
-
-function getSelectedModel() {
-  const saved = localStorage.getItem("lovhub_global_model");
-  return AI_MODELS.find(m => m.id === saved) || AI_MODELS[0];
-}
-
-function getOpenRouterKey(): string {
-  return localStorage.getItem("lovhub_openrouter_api_key") || "";
-}
-
-async function callAI(prompt: string, systemPrompt: string): Promise<string> {
-  const model = getSelectedModel();
-
-  if (model.isLocal) {
-    const resp = await fetch(`${model.baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "local-model",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: prompt },
-        ],
-        stream: false,
-      }),
-    });
-    if (!resp.ok) {
-      throw new Error(`Erro ao conectar com IA local (${model.baseUrl}). Verifique se o servidor está rodando.`);
-    }
-    const data = await resp.json();
-    return data.choices?.[0]?.message?.content || "";
-  }
-
-  // Cloud model via OpenRouter proxy edge function
-  const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/openrouter-proxy`;
-  const openRouterKey = getOpenRouterKey();
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-  };
-  if (openRouterKey) headers["x-openrouter-key"] = openRouterKey;
-
-  const resp = await fetch(apiUrl, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      model: model.openRouterModel || "google/gemma-3n-e4b-it:free",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: prompt },
-      ],
-      stream: false,
-    }),
-  });
-
-  if (!resp.ok) {
-    const data = await resp.json().catch(() => ({}));
-    throw new Error(data.error || `Erro na API OpenRouter: ${resp.status}`);
-  }
-
-  const data = await resp.json();
-  return data.choices?.[0]?.message?.content || "";
-}
-
-function extractJSON(text: string): string {
-  // Try to find JSON block in markdown code fence
-  const fenceMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)```/);
-  if (fenceMatch) return fenceMatch[1].trim();
-  // Try raw JSON
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (jsonMatch) return jsonMatch[0];
-  return text;
-}
 
 export function useAgentWorkflow() {
   const [step, setStep] = useState<WorkflowStep>("select");
@@ -212,82 +139,16 @@ Generate COMPLETE file contents, not diffs.`;
 
       const prompt = `Task: ${planStep.title}\nDescription: ${planStep.description}\n\nCurrent files:\n${filesContent}`;
 
-      const model = getSelectedModel();
-      let resp: Response;
+      const resp = await callAIStream([
+        { role: "system", content: systemPrompt },
+        { role: "user", content: prompt },
+      ]);
 
-      if (model.isLocal) {
-        resp = await fetch(`${model.baseUrl}/chat/completions`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            model: "local-model",
-            messages: [
-              { role: "system", content: systemPrompt },
-              { role: "user", content: prompt },
-            ],
-            stream: true,
-          }),
-        });
-        if (!resp.ok) {
-          throw new Error(`Erro ao conectar com IA local (${model.baseUrl})`);
-        }
-    } else {
-        const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/openrouter-proxy`;
-        const openRouterKey = getOpenRouterKey();
-        const headers: Record<string, string> = {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-        };
-        if (openRouterKey) headers["x-openrouter-key"] = openRouterKey;
-        resp = await fetch(apiUrl, {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
-            model: model.openRouterModel || "google/gemma-3n-e4b-it:free",
-            messages: [
-              { role: "system", content: systemPrompt },
-              { role: "user", content: prompt },
-            ],
-            stream: true,
-          }),
-        });
-        if (!resp.ok) {
-          const data = await resp.json().catch(() => ({}));
-          throw new Error(data.error || `Erro na API OpenRouter: ${resp.status}`);
-        }
-      }
-
-      const reader = resp.body!.getReader();
-      const decoder = new TextDecoder();
       let fullContent = "";
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        let newlineIndex;
-        while ((newlineIndex = buffer.indexOf("\n")) !== -1) {
-          let line = buffer.slice(0, newlineIndex);
-          buffer = buffer.slice(newlineIndex + 1);
-          if (line.endsWith("\r")) line = line.slice(0, -1);
-          if (!line.startsWith("data: ")) continue;
-          const jsonStr = line.slice(6).trim();
-          if (jsonStr === "[DONE]") break;
-          try {
-            const parsed = JSON.parse(jsonStr);
-            const content = parsed.choices?.[0]?.delta?.content;
-            if (content) {
-              fullContent += content;
-              setPatchContent(fullContent);
-            }
-          } catch {
-            buffer = line + "\n" + buffer;
-            break;
-          }
-        }
-      }
+      await processSSEStream(resp, (content) => {
+        fullContent += content;
+        setPatchContent(fullContent);
+      });
 
       const regex = /```filepath:([^\n]+)\n([\s\S]*?)```/g;
       let match;

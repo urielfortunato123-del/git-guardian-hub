@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
-import { Check, Cpu, Monitor, Cloud, Key, Eye, EyeOff, ExternalLink, Copy, CheckCheck, Search, RefreshCw } from "lucide-react";
+import { Check, Cpu, Monitor, Cloud, Key, Eye, EyeOff, ExternalLink, Copy, CheckCheck, Search, RefreshCw, Loader2, X } from "lucide-react";
+import { validateOpenRouterKey } from "@/services/ai";
 import { AI_MODELS, MODEL_CATEGORIES, type AIModel } from "@/lib/aiModels";
 import { useModel } from "@/contexts/ModelContext";
 import { useLocalModelStatus } from "@/hooks/useLocalModelStatus";
@@ -26,14 +27,31 @@ function ApiKeySection() {
   const { openRouterApiKey, setOpenRouterApiKey } = useModel();
   const [showKey, setShowKey] = useState(false);
   const [inputKey, setInputKey] = useState(openRouterApiKey);
+  const [validating, setValidating] = useState(false);
+  const [validationResult, setValidationResult] = useState<{ valid: boolean; error?: string } | null>(null);
 
-  const save = () => {
-    setOpenRouterApiKey(inputKey.trim());
+  const save = async () => {
+    const key = inputKey.trim();
+    if (!key) return;
+    setValidating(true);
+    setValidationResult(null);
+    try {
+      const result = await validateOpenRouterKey(key);
+      setValidationResult(result);
+      if (result.valid) {
+        setOpenRouterApiKey(key);
+      }
+    } catch {
+      setValidationResult({ valid: false, error: "Erro de rede ao validar" });
+    } finally {
+      setValidating(false);
+    }
   };
 
   const clear = () => {
     setInputKey("");
     setOpenRouterApiKey("");
+    setValidationResult(null);
   };
 
   return (
@@ -50,16 +68,16 @@ function ApiKeySection() {
           <Input
             type={showKey ? "text" : "password"}
             value={inputKey}
-            onChange={(e) => setInputKey(e.target.value)}
+            onChange={(e) => { setInputKey(e.target.value); setValidationResult(null); }}
             placeholder="sk-or-v1-..."
-            className="h-9 text-xs font-mono pr-8"
+            className={`h-9 text-xs font-mono pr-8 ${validationResult && !validationResult.valid ? "border-destructive" : ""}`}
           />
           <button onClick={() => setShowKey(!showKey)} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
             {showKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
           </button>
         </div>
-        <Button variant="default" size="sm" className="h-9" onClick={save}>
-          Salvar
+        <Button variant="default" size="sm" className="h-9" onClick={save} disabled={validating || !inputKey.trim()}>
+          {validating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Salvar"}
         </Button>
         {openRouterApiKey && (
           <Button variant="outline" size="sm" className="h-9" onClick={clear}>
@@ -67,10 +85,16 @@ function ApiKeySection() {
           </Button>
         )}
       </div>
-      {openRouterApiKey && (
+      {validationResult && !validationResult.valid && (
+        <div className="flex items-center gap-1.5 mt-2 text-[10px] text-destructive">
+          <X className="w-3 h-3" />
+          <span>{validationResult.error || "Chave inválida"}</span>
+        </div>
+      )}
+      {openRouterApiKey && (!validationResult || validationResult.valid) && (
         <div className="flex items-center gap-1.5 mt-2 text-[10px] text-primary">
           <Check className="w-3 h-3" />
-          <span>API key salva localmente</span>
+          <span>API key validada e salva localmente</span>
         </div>
       )}
     </div>
