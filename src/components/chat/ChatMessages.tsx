@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, forwardRef } from "react";
+import { useRef, useEffect, useState } from "react";
 import { Bot, User, Loader2, FileText, Brain, ChevronDown, Image } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import type { Message } from "./types";
@@ -9,7 +9,7 @@ interface ChatMessagesProps {
   modelName: string;
 }
 
-export const ChatMessages = forwardRef<HTMLDivElement, ChatMessagesProps>(function ChatMessages({ messages, isLoading, modelName }, ref) {
+export function ChatMessages({ messages, isLoading, modelName }: ChatMessagesProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -119,7 +119,7 @@ export const ChatMessages = forwardRef<HTMLDivElement, ChatMessagesProps>(functi
       <div ref={messagesEndRef} />
     </div>
   );
-});
+}
 
 function ReasoningBlock({ content }: { content: string }) {
   const [expanded, setExpanded] = useState(false);

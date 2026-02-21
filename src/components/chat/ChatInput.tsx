@@ -1,4 +1,4 @@
-import { useState, useCallback, forwardRef } from "react";
+import { useState, useCallback } from "react";
 import { Send } from "lucide-react";
 import type { Attachment } from "./types";
 import { AttachButton, AttachmentPreview, DragOverlay, useAttachmentProcessing } from "./AttachmentManager";
@@ -13,7 +13,7 @@ interface ChatInputProps {
   onDrop: (e: React.DragEvent) => void;
 }
 
-export const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(function ChatInput({ onSend, isLoading, isDragging, onDragEnter, onDragLeave, onDragOver, onDrop }, ref) {
+export function ChatInput({ onSend, isLoading, isDragging, onDragEnter, onDragLeave, onDragOver, onDrop }: ChatInputProps) {
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
 
@@ -77,4 +77,4 @@ export const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(function Cha
       </div>
     </>
   );
-});
+}
