@@ -51,9 +51,8 @@ function getSelectedModel() {
   return AI_MODELS.find(m => m.id === saved) || AI_MODELS[0];
 }
 
-function getLocalBaseUrl(): string {
-  const model = getSelectedModel();
-  return model.baseUrl;
+function getOpenRouterKey(): string {
+  return localStorage.getItem("lovhub_openrouter_api_key") || "";
 }
 
 async function callAI(prompt: string, systemPrompt: string): Promise<string> {
@@ -81,12 +80,16 @@ async function callAI(prompt: string, systemPrompt: string): Promise<string> {
 
   // Cloud model via OpenRouter proxy edge function
   const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/openrouter-proxy`;
+  const openRouterKey = getOpenRouterKey();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+  };
+  if (openRouterKey) headers["x-openrouter-key"] = openRouterKey;
+
   const resp = await fetch(apiUrl, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-    },
+    headers,
     body: JSON.stringify({
       model: model.openRouterModel || "google/gemma-3n-e4b-it:free",
       messages: [
@@ -228,14 +231,17 @@ Generate COMPLETE file contents, not diffs.`;
         if (!resp.ok) {
           throw new Error(`Erro ao conectar com IA local (${model.baseUrl})`);
         }
-      } else {
+    } else {
         const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/openrouter-proxy`;
+        const openRouterKey = getOpenRouterKey();
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        };
+        if (openRouterKey) headers["x-openrouter-key"] = openRouterKey;
         resp = await fetch(apiUrl, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          },
+          headers,
           body: JSON.stringify({
             model: model.openRouterModel || "google/gemma-3n-e4b-it:free",
             messages: [

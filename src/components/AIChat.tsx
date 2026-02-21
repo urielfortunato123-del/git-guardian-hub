@@ -57,7 +57,7 @@ export function AIChat({ files, onFileUpdate }: AIChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const { selectedModel, setSelectedModel } = useModel();
+  const { selectedModel, setSelectedModel, openRouterApiKey } = useModel();
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [reasoningEnabled] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -193,19 +193,32 @@ export function AIChat({ files, onFileUpdate }: AIChatProps) {
 
     try {
       let response: Response;
+      const systemPrompt = buildSystemPrompt(filesObj);
+      const chatMessages = [
+        { role: "system", content: systemPrompt },
+        ...messages.map(m => ({ role: m.role, content: m.content })),
+        { role: "user", content: input },
+      ];
 
-      {
-        const systemPrompt = buildSystemPrompt(filesObj);
+      if (selectedModel.isLocal) {
         response = await fetch(`${selectedModel.baseUrl}/chat/completions`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ model: "local-model", messages: chatMessages, stream: true }),
+        });
+      } else {
+        const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/openrouter-proxy`;
+        const hdrs: Record<string, string> = {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        };
+        if (openRouterApiKey) hdrs["x-openrouter-key"] = openRouterApiKey;
+        response = await fetch(apiUrl, {
+          method: "POST",
+          headers: hdrs,
           body: JSON.stringify({
-            model: "local-model",
-            messages: [
-              { role: "system", content: systemPrompt },
-              ...messages.map(m => ({ role: m.role, content: m.content })),
-              { role: "user", content: input },
-            ],
+            model: selectedModel.openRouterModel || "google/gemma-3n-e4b-it:free",
+            messages: chatMessages,
             stream: true,
           }),
         });
