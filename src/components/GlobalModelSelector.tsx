@@ -1,6 +1,8 @@
+import { useMemo } from "react";
 import { useModel } from "@/contexts/ModelContext";
 import { AI_MODELS, MODEL_CATEGORIES } from "@/lib/aiModels";
-import { Check, Cloud, Monitor } from "lucide-react";
+import { useLocalModelStatus } from "@/hooks/useLocalModelStatus";
+import { Cloud, Monitor } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -13,6 +15,9 @@ import {
 
 export function GlobalModelSelector() {
   const { selectedModel, setSelectedModel } = useModel();
+
+  const localEndpoints = useMemo(() => AI_MODELS.filter((m) => m.isLocal).map((m) => m.baseUrl), []);
+  const localStatuses = useLocalModelStatus(localEndpoints);
 
   const categories = ["cloud-free", "cloud-premium", "local"] as const;
 
@@ -40,14 +45,20 @@ export function GlobalModelSelector() {
             return (
               <SelectGroup key={cat}>
                 <SelectLabel className="text-[10px] text-muted-foreground">{MODEL_CATEGORIES[cat].label}</SelectLabel>
-                {catModels.map((m) => (
-                  <SelectItem key={m.id} value={m.id} className="text-xs">
-                    <span className="flex items-center gap-1.5 w-full">
-                      <span>{m.icon}</span>
-                      <span className="truncate">{m.name}</span>
-                    </span>
-                  </SelectItem>
-                ))}
+                {catModels.map((m) => {
+                  const isOnline = m.isLocal ? localStatuses[m.baseUrl] : undefined;
+                  return (
+                    <SelectItem key={m.id} value={m.id} className="text-xs">
+                      <span className="flex items-center gap-1.5 w-full">
+                        <span>{m.icon}</span>
+                        <span className="truncate">{m.name}</span>
+                        {m.isLocal && (
+                          <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isOnline ? "bg-green-500" : "bg-muted-foreground/40"}`} />
+                        )}
+                      </span>
+                    </SelectItem>
+                  );
+                })}
               </SelectGroup>
             );
           })}
@@ -55,8 +66,17 @@ export function GlobalModelSelector() {
       </Select>
 
       <div className="flex items-center gap-1.5 px-1 text-[10px] text-muted-foreground">
-        {selectedModel.isLocal ? <Monitor className="w-3 h-3 text-primary flex-shrink-0" /> : <Cloud className="w-3 h-3 text-primary flex-shrink-0" />}
-        <span className="truncate">{selectedModel.isLocal ? `Local — ${selectedModel.baseUrl}` : `Cloud — ${selectedModel.provider}`}</span>
+        {selectedModel.isLocal ? (
+          <>
+            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${localStatuses[selectedModel.baseUrl] ? "bg-green-500" : "bg-destructive"}`} />
+            <span className="truncate">{localStatuses[selectedModel.baseUrl] ? "Online" : "Offline"} — {selectedModel.baseUrl}</span>
+          </>
+        ) : (
+          <>
+            <Cloud className="w-3 h-3 text-primary flex-shrink-0" />
+            <span className="truncate">Cloud — {selectedModel.provider}</span>
+          </>
+        )}
       </div>
     </div>
   );
