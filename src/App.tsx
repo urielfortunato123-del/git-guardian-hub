@@ -14,6 +14,7 @@ const devDelay = <T,>(p: Promise<T>, ms = 1000): Promise<T> =>
 
 // Lazy-loaded pages (with artificial delay for dev spinner testing)
 const DashboardPage = lazy(() => devDelay(import("@/pages/DashboardPage").then(m => ({ default: m.DashboardPage }))));
+const GenLabEnginePage = lazy(() => devDelay(import("@/pages/GenLabEnginePage").then(m => ({ default: m.GenLabEnginePage }))));
 const RepoExplorerPage = lazy(() => devDelay(import("@/pages/RepoExplorerPage").then(m => ({ default: m.RepoExplorerPage }))));
 const EditorPage = lazy(() => devDelay(import("@/pages/EditorPage").then(m => ({ default: m.EditorPage }))));
 const NewProjectPage = lazy(() => devDelay(import("@/pages/NewProjectPage").then(m => ({ default: m.NewProjectPage }))));
@@ -45,6 +46,7 @@ function AppRoutes() {
         <Routes>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/genlab" element={<GenLabEnginePage />} />
           <Route path="/repo/:owner/:name" element={<RepoExplorerPage />} />
           <Route path="/editor/:owner/:name" element={<EditorPage />} />
           <Route path="/new" element={<NewProjectPage />} />

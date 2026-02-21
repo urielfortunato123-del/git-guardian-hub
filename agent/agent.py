@@ -1,5 +1,5 @@
 """
-Lovable Infinity - Agente Local
+GenLab Engine — Agente Local
 Rode com: python agent.py
 Acessa em: http://127.0.0.1:8787
 """
@@ -161,7 +161,7 @@ class BackupRestore(BaseModel):
 
 # ── App ──
 
-app = FastAPI(title="Lovable Infinity Agent", version="0.3.0")
+app = FastAPI(title="GenLab Engine Agent", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -503,10 +503,138 @@ def api_license_status():
     return {"licensed": result.get("valid", False), "hardware_id": get_hardware_id(), **result}
 
 
+
+# ── GenLab Engine Endpoints ──
+
+from project_analyzer import analyze_project as _analyze_project
+from code_generator import (
+    recreate_project as _recreate_project,
+    get_llm_config,
+    GENERATED_ROOT,
+)
+
+
+class AnalyzeReq(BaseModel):
+    project_id: str
+
+class RecreateReq(BaseModel):
+    project_id: str
+    output_name: Optional[str] = None
+
+class RunProjectReq(BaseModel):
+    project_id: str  # ID in generated_projects
+    mode: str = "auto"  # "auto", "docker", "npm", "python"
+
+class LLMConfigReq(BaseModel):
+    provider: str = "ollama"
+    model: str = "gemma3"
+    base_url: Optional[str] = None
+
+
+@app.post("/v1/genlab/analyze")
+def genlab_analyze(req: AnalyzeReq):
+    """Analisa e classifica um projeto."""
+    repo_dir = project_path(req.project_id)
+    analysis = _analyze_project(repo_dir)
+    analysis["project_id"] = req.project_id
+    return analysis
+
+
+@app.post("/v1/genlab/recreate")
+def genlab_recreate(req: RecreateReq):
+    """Recria um projeto usando IA local."""
+    repo_dir = project_path(req.project_id)
+    output_name = req.output_name or f"genlab_{req.project_id}"
+    result = _recreate_project(repo_dir, output_name)
+    return result
+
+
+@app.get("/v1/genlab/projects")
+def genlab_list_projects():
+    """Lista projetos gerados pelo GenLab."""
+    projects = []
+    if GENERATED_ROOT.exists():
+        for d in sorted(GENERATED_ROOT.iterdir()):
+            if d.is_dir():
+                file_count = sum(1 for f in d.rglob("*") if f.is_file())
+                projects.append({
+                    "name": d.name,
+                    "dir": str(d),
+                    "file_count": file_count,
+                })
+    return {"projects": projects}
+
+
+@app.get("/v1/genlab/project/tree")
+def genlab_project_tree(name: str):
+    """Lista arquivos de um projeto gerado."""
+    project_dir = (GENERATED_ROOT / name).resolve()
+    if not str(project_dir).startswith(str(GENERATED_ROOT.resolve())):
+        raise HTTPException(400, "Invalid name")
+    if not project_dir.exists():
+        raise HTTPException(404, "Generated project not found")
+    files = safe_list_files(project_dir)
+    return {"name": name, "files": files}
+
+
+@app.post("/v1/genlab/run")
+def genlab_run(req: RunProjectReq):
+    """Executa um projeto gerado localmente."""
+    project_dir = (GENERATED_ROOT / req.project_id).resolve()
+    if not str(project_dir).startswith(str(GENERATED_ROOT.resolve())):
+        raise HTTPException(400, "Invalid project id")
+    if not project_dir.exists():
+        raise HTTPException(404, "Generated project not found")
+
+    mode = req.mode
+    logs = ""
+
+    try:
+        if mode == "auto":
+            # Auto-detect best run mode
+            if (project_dir / "docker-compose.yml").exists() or (project_dir / "docker-compose.yaml").exists():
+                mode = "docker"
+            elif (project_dir / "package.json").exists():
+                mode = "npm"
+            elif (project_dir / "requirements.txt").exists() or (project_dir / "main.py").exists():
+                mode = "python"
+            else:
+                raise HTTPException(400, "Cannot auto-detect run mode")
+
+        if mode == "docker":
+            logs = run_cmd(["docker", "compose", "up", "--build", "-d"], cwd=project_dir, timeout=300)
+        elif mode == "npm":
+            logs = run_cmd(["bash", "-lc", "npm install && npm run dev &"], cwd=project_dir, timeout=120)
+        elif mode == "python":
+            entry = "main.py" if (project_dir / "main.py").exists() else "app.py"
+            logs = run_cmd(["bash", "-lc", f"python3 -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt 2>/dev/null; python {entry} &"], cwd=project_dir, timeout=120)
+        else:
+            raise HTTPException(400, f"Unknown mode: {mode}")
+
+        return {"ok": True, "mode": mode, "logs": logs[-10000:]}
+    except Exception as e:
+        return {"ok": False, "mode": mode, "error": str(e), "logs": logs[-10000:]}
+
+
+@app.get("/v1/genlab/llm-config")
+def genlab_llm_config_get():
+    """Retorna configuração atual do LLM."""
+    return get_llm_config()
+
+
+@app.post("/v1/genlab/llm-config")
+def genlab_llm_config_set(req: LLMConfigReq):
+    """Atualiza configuração do LLM via env vars."""
+    os.environ["LLM_PROVIDER"] = req.provider
+    os.environ["LLM_MODEL"] = req.model
+    if req.base_url:
+        os.environ["LLM_BASE_URL"] = req.base_url
+    return get_llm_config()
+
+
 if __name__ == "__main__":
     import uvicorn
-    # Start license heartbeat in background
     start_heartbeat()
-    print("🚀 Lovable Infinity Agent running at http://127.0.0.1:8787")
+    print("🧬 GenLab Engine running at http://127.0.0.1:8787")
     print(f"📁 Workspace: {APP_ROOT}")
     uvicorn.run(app, host="127.0.0.1", port=8787)
