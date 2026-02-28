@@ -2,6 +2,12 @@ import { useState, useEffect, useCallback } from "react";
 
 const CHECK_INTERVAL = 15_000;
 
+/** Skip local polling when running on a remote preview (not localhost/electron) */
+function isLocalEnvironment(): boolean {
+  const host = window.location.hostname;
+  return host === "localhost" || host === "127.0.0.1" || host.endsWith(".local") || navigator.userAgent.includes("Electron");
+}
+
 export function useLocalModelStatus(endpoints: string[]) {
   const [statuses, setStatuses] = useState<Record<string, boolean>>({});
   const [checking, setChecking] = useState(false);
@@ -19,6 +25,7 @@ export function useLocalModelStatus(endpoints: string[]) {
   }, []);
 
   const checkAll = useCallback(async () => {
+    if (!isLocalEnvironment()) return;
     setChecking(true);
     const results: Record<string, boolean> = {};
     await Promise.all(endpoints.map(async (url) => { results[url] = await checkEndpoint(url); }));
@@ -27,7 +34,7 @@ export function useLocalModelStatus(endpoints: string[]) {
   }, [endpoints, checkEndpoint]);
 
   useEffect(() => {
-    if (endpoints.length === 0) return;
+    if (endpoints.length === 0 || !isLocalEnvironment()) return;
     checkAll();
     const interval = setInterval(checkAll, CHECK_INTERVAL);
     return () => clearInterval(interval);
