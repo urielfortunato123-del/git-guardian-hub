@@ -162,7 +162,7 @@ export function ModelsPage() {
   const localEndpoints = useMemo(() => AI_MODELS.filter((m) => m.isLocal).map((m) => m.baseUrl), []);
   const { statuses: localStatuses, checking, retry } = useLocalModelStatus(localEndpoints);
 
-  const categories = ["cloud-free", "cloud-premium", "local"] as const;
+  const categories = ["cloud-lovable", "cloud-free", "cloud-premium", "local"] as const;
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
@@ -235,7 +235,7 @@ export function ModelsPage() {
         <div className="mt-3 flex items-center gap-3 flex-wrap">
           <Badge variant="secondary" className="text-xs gap-1.5">
             {selectedModel.isLocal ? <Monitor className="w-3.5 h-3.5" /> : <Cloud className="w-3.5 h-3.5" />}
-            {selectedModel.isLocal ? "Local" : selectedModel.category === "cloud-free" ? "Free" : "Premium"}
+            {selectedModel.isLocal ? "Local" : selectedModel.category === "cloud-lovable" ? "Lovable AI" : selectedModel.category === "cloud-free" ? "Free" : "Premium"}
           </Badge>
           {selectedModel.isLocal && (
             <Badge variant={localStatuses[selectedModel.baseUrl] ? "secondary" : "outline"} className="text-xs gap-1.5">
