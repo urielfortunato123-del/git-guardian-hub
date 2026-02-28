@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { Check, Cpu, Monitor, Cloud, Key, Eye, EyeOff, ExternalLink, Copy, CheckCheck, Search, RefreshCw, Loader2, X } from "lucide-react";
-import { validateOpenRouterKey } from "@/services/ai";
+import { validateOpenRouterKey, validateGoogleAiKey } from "@/services/ai";
 import { AI_MODELS, MODEL_CATEGORIES, type AIModel } from "@/lib/aiModels";
 import { useModel } from "@/contexts/ModelContext";
 import { useLocalModelStatus } from "@/hooks/useLocalModelStatus";
@@ -27,20 +27,31 @@ function GoogleAiKeySection() {
   const { googleAiApiKey, setGoogleAiApiKey } = useModel();
   const [showKey, setShowKey] = useState(false);
   const [inputKey, setInputKey] = useState(googleAiApiKey);
-  const [saved, setSaved] = useState(false);
+  const [validating, setValidating] = useState(false);
+  const [validationResult, setValidationResult] = useState<{ valid: boolean; error?: string } | null>(null);
 
-  const save = () => {
+  const save = async () => {
     const key = inputKey.trim();
     if (!key) return;
-    setGoogleAiApiKey(key);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    setValidating(true);
+    setValidationResult(null);
+    try {
+      const result = await validateGoogleAiKey(key);
+      setValidationResult(result);
+      if (result.valid) {
+        setGoogleAiApiKey(key);
+      }
+    } catch {
+      setValidationResult({ valid: false, error: "Erro de rede ao validar" });
+    } finally {
+      setValidating(false);
+    }
   };
 
   const clear = () => {
     setInputKey("");
     setGoogleAiApiKey("");
-    setSaved(false);
+    setValidationResult(null);
   };
 
   return (
@@ -57,16 +68,16 @@ function GoogleAiKeySection() {
           <Input
             type={showKey ? "text" : "password"}
             value={inputKey}
-            onChange={(e) => { setInputKey(e.target.value); setSaved(false); }}
+            onChange={(e) => { setInputKey(e.target.value); setValidationResult(null); }}
             placeholder="AIza..."
-            className="h-9 text-xs font-mono pr-8"
+            className={`h-9 text-xs font-mono pr-8 ${validationResult && !validationResult.valid ? "border-destructive" : ""}`}
           />
           <button onClick={() => setShowKey(!showKey)} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
             {showKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
           </button>
         </div>
-        <Button variant="default" size="sm" className="h-9" onClick={save} disabled={!inputKey.trim()}>
-          {saved ? <Check className="w-3.5 h-3.5" /> : "Salvar"}
+        <Button variant="default" size="sm" className="h-9" onClick={save} disabled={validating || !inputKey.trim()}>
+          {validating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Salvar"}
         </Button>
         {googleAiApiKey && (
           <Button variant="outline" size="sm" className="h-9" onClick={clear}>
@@ -74,10 +85,16 @@ function GoogleAiKeySection() {
           </Button>
         )}
       </div>
-      {googleAiApiKey && (
+      {validationResult && !validationResult.valid && (
+        <div className="flex items-center gap-1.5 mt-2 text-[10px] text-destructive">
+          <X className="w-3 h-3" />
+          <span>{validationResult.error || "Chave inválida"}</span>
+        </div>
+      )}
+      {googleAiApiKey && (!validationResult || validationResult.valid) && (
         <div className="flex items-center gap-1.5 mt-2 text-[10px] text-primary">
           <Check className="w-3 h-3" />
-          <span>Google AI key salva localmente — modelos Lovable AI usarão sua key</span>
+          <span>Google AI key validada e salva localmente</span>
         </div>
       )}
     </div>
