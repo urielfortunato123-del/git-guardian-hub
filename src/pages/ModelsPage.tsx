@@ -23,6 +23,67 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 
+function GoogleAiKeySection() {
+  const { googleAiApiKey, setGoogleAiApiKey } = useModel();
+  const [showKey, setShowKey] = useState(false);
+  const [inputKey, setInputKey] = useState(googleAiApiKey);
+  const [saved, setSaved] = useState(false);
+
+  const save = () => {
+    const key = inputKey.trim();
+    if (!key) return;
+    setGoogleAiApiKey(key);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  const clear = () => {
+    setInputKey("");
+    setGoogleAiApiKey("");
+    setSaved(false);
+  };
+
+  return (
+    <div className="mb-6 rounded-xl border border-border bg-card p-5">
+      <div className="flex items-center gap-2 mb-3">
+        <Key className="w-5 h-5 text-primary" />
+        <h2 className="text-lg font-semibold text-foreground">Google AI API Key</h2>
+      </div>
+      <p className="text-sm text-muted-foreground mb-4">
+        Insira sua chave do <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" className="text-primary hover:underline inline-flex items-center gap-1">Google AI Studio <ExternalLink className="w-3 h-3" /></a> para usar Gemini diretamente. Sem key, usa o gateway Lovable AI.
+      </p>
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <Input
+            type={showKey ? "text" : "password"}
+            value={inputKey}
+            onChange={(e) => { setInputKey(e.target.value); setSaved(false); }}
+            placeholder="AIza..."
+            className="h-9 text-xs font-mono pr-8"
+          />
+          <button onClick={() => setShowKey(!showKey)} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+            {showKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+          </button>
+        </div>
+        <Button variant="default" size="sm" className="h-9" onClick={save} disabled={!inputKey.trim()}>
+          {saved ? <Check className="w-3.5 h-3.5" /> : "Salvar"}
+        </Button>
+        {googleAiApiKey && (
+          <Button variant="outline" size="sm" className="h-9" onClick={clear}>
+            Limpar
+          </Button>
+        )}
+      </div>
+      {googleAiApiKey && (
+        <div className="flex items-center gap-1.5 mt-2 text-[10px] text-primary">
+          <Check className="w-3 h-3" />
+          <span>Google AI key salva localmente — modelos Lovable AI usarão sua key</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ApiKeySection() {
   const { openRouterApiKey, setOpenRouterApiKey } = useModel();
   const [showKey, setShowKey] = useState(false);
@@ -176,6 +237,7 @@ export function ModelsPage() {
         </p>
       </div>
 
+      <GoogleAiKeySection />
       <ApiKeySection />
 
       {/* Model selector dropdown */}

@@ -13,6 +13,10 @@ export function getOpenRouterKey(): string {
   return localStorage.getItem("lovhub_openrouter_api_key") || "";
 }
 
+export function getGoogleAiKey(): string {
+  return localStorage.getItem("lovhub_google_ai_api_key") || "";
+}
+
 interface CallAIOptions {
   model?: AIModel;
   stream?: boolean;
@@ -51,10 +55,12 @@ export async function callAI(
   const isLovable = model.gateway === "lovable";
   const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${isLovable ? "lovable-ai-proxy" : "openrouter-proxy"}`;
   const openRouterKey = getOpenRouterKey();
+  const googleAiKey = getGoogleAiKey();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
   };
+  if (isLovable && googleAiKey) headers["x-google-ai-key"] = googleAiKey;
   if (!isLovable && openRouterKey) headers["x-openrouter-key"] = openRouterKey;
 
   const resp = await fetch(apiUrl, {
@@ -103,10 +109,12 @@ export async function callAIStream(
   const isLovable = model.gateway === "lovable";
   const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${isLovable ? "lovable-ai-proxy" : "openrouter-proxy"}`;
   const openRouterKey = getOpenRouterKey();
+  const googleAiKey = getGoogleAiKey();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
   };
+  if (isLovable && googleAiKey) headers["x-google-ai-key"] = googleAiKey;
   if (!isLovable && openRouterKey) headers["x-openrouter-key"] = openRouterKey;
 
   const resp = await fetch(apiUrl, {
