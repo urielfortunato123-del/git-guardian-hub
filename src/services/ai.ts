@@ -212,3 +212,19 @@ export async function validateOpenRouterKey(key: string): Promise<{ valid: boole
     return { valid: false, error: "Não foi possível validar (erro de rede)" };
   }
 }
+
+/**
+ * Validate a Google AI API key by listing models.
+ */
+export async function validateGoogleAiKey(key: string): Promise<{ valid: boolean; error?: string }> {
+  try {
+    const resp = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`,
+    );
+    if (resp.ok) return { valid: true };
+    if (resp.status === 400 || resp.status === 403) return { valid: false, error: "Chave inválida" };
+    return { valid: false, error: `Erro: ${resp.status}` };
+  } catch {
+    return { valid: false, error: "Não foi possível validar (erro de rede)" };
+  }
+}
