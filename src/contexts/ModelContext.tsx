@@ -2,12 +2,15 @@ import { createContext, useContext, useState, ReactNode, useCallback } from "rea
 import { AI_MODELS, DEFAULT_MODEL, type AIModel } from "@/lib/aiModels";
 
 const OPENROUTER_KEY_STORAGE = "lovhub_openrouter_api_key";
+const GOOGLE_AI_KEY_STORAGE = "lovhub_google_ai_api_key";
 
 interface ModelContextType {
   selectedModel: AIModel;
   setSelectedModel: (model: AIModel) => void;
   openRouterApiKey: string;
   setOpenRouterApiKey: (key: string) => void;
+  googleAiApiKey: string;
+  setGoogleAiApiKey: (key: string) => void;
 }
 
 const ModelContext = createContext<ModelContextType | undefined>(undefined);
@@ -26,6 +29,10 @@ export function ModelProvider({ children }: { children: ReactNode }) {
     () => localStorage.getItem(OPENROUTER_KEY_STORAGE) || ""
   );
 
+  const [googleAiApiKey, setGoogleAiApiKeyState] = useState<string>(
+    () => localStorage.getItem(GOOGLE_AI_KEY_STORAGE) || ""
+  );
+
   const setSelectedModel = useCallback((model: AIModel) => {
     setSelectedModelState(model);
     localStorage.setItem("lovhub_global_model", model.id);
@@ -40,8 +47,17 @@ export function ModelProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const setGoogleAiApiKey = useCallback((key: string) => {
+    setGoogleAiApiKeyState(key);
+    if (key) {
+      localStorage.setItem(GOOGLE_AI_KEY_STORAGE, key);
+    } else {
+      localStorage.removeItem(GOOGLE_AI_KEY_STORAGE);
+    }
+  }, []);
+
   return (
-    <ModelContext.Provider value={{ selectedModel, setSelectedModel, openRouterApiKey, setOpenRouterApiKey }}>
+    <ModelContext.Provider value={{ selectedModel, setSelectedModel, openRouterApiKey, setOpenRouterApiKey, googleAiApiKey, setGoogleAiApiKey }}>
       {children}
     </ModelContext.Provider>
   );
