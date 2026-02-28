@@ -48,19 +48,20 @@ export async function callAI(
     return data.choices?.[0]?.message?.content || "";
   }
 
-  const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/openrouter-proxy`;
+  const isLovable = model.gateway === "lovable";
+  const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${isLovable ? "lovable-ai-proxy" : "openrouter-proxy"}`;
   const openRouterKey = getOpenRouterKey();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
   };
-  if (openRouterKey) headers["x-openrouter-key"] = openRouterKey;
+  if (!isLovable && openRouterKey) headers["x-openrouter-key"] = openRouterKey;
 
   const resp = await fetch(apiUrl, {
     method: "POST",
     headers,
     body: JSON.stringify({
-      model: model.openRouterModel || "google/gemma-3n-e4b-it:free",
+      model: model.openRouterModel || "google/gemini-2.5-flash",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: prompt },
@@ -71,7 +72,7 @@ export async function callAI(
 
   if (!resp.ok) {
     const data = await resp.json().catch(() => ({}));
-    throw new Error(data.error || `Erro na API OpenRouter: ${resp.status}`);
+    throw new Error(data.error || `Erro na API: ${resp.status}`);
   }
 
   const data = await resp.json();
@@ -99,19 +100,20 @@ export async function callAIStream(
     return resp;
   }
 
-  const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/openrouter-proxy`;
+  const isLovable = model.gateway === "lovable";
+  const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${isLovable ? "lovable-ai-proxy" : "openrouter-proxy"}`;
   const openRouterKey = getOpenRouterKey();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
   };
-  if (openRouterKey) headers["x-openrouter-key"] = openRouterKey;
+  if (!isLovable && openRouterKey) headers["x-openrouter-key"] = openRouterKey;
 
   const resp = await fetch(apiUrl, {
     method: "POST",
     headers,
     body: JSON.stringify({
-      model: model.openRouterModel || "google/gemma-3n-e4b-it:free",
+      model: model.openRouterModel || "google/gemini-2.5-flash",
       messages,
       stream: true,
     }),
@@ -119,7 +121,7 @@ export async function callAIStream(
 
   if (!resp.ok) {
     const data = await resp.json().catch(() => ({}));
-    throw new Error(data.error || `Erro na API OpenRouter: ${resp.status}`);
+    throw new Error(data.error || `Erro na API: ${resp.status}`);
   }
 
   return resp;
