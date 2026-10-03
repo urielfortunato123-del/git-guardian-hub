@@ -53,6 +53,15 @@ jobs:
                     override fun lookup(hostname: String): List<InetAddress> =
                         if (hostname.equals(host, ignoreCase = true)) bootstrap else Dns.SYSTEM.lookup(hostname)
                 })''')
+          if '.dns(Dns { requestedHost ->' in s:
+              a=s.index('.dns(Dns { requestedHost ->')
+              b=s.index('                .socketFactory', a)
+              replacement='''.dns(object : Dns {
+                    override fun lookup(hostname: String): List<InetAddress> =
+                        if (hostname.equals(host, ignoreCase = true)) bootstrap else Dns.SYSTEM.lookup(hostname)
+                })
+'''
+              s=s[:a]+replacement+s[b:]
           doh.write_text(s)
           agent=Path('/tmp/viashield-src/ViaShield_DNS/app/src/main/java/com/mova/viashield/ViaShieldAiAgent.kt')
           s=agent.read_text().replace('c.sendMessage(prompt).text.ifBlank { "A IA não retornou texto." }','c.sendMessage(prompt).toString().trim().ifBlank { "A IA não retornou texto." }')
