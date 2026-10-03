@@ -1,0 +1,31 @@
+name: Export Android signing tools
+
+on:
+  push:
+    branches:
+      - viashield-build-v020
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Package apksigner and zipalign
+        shell: bash
+        run: |
+          set -euxo pipefail
+          BT=$(ls -1 "$ANDROID_HOME/build-tools" | sort -V | tail -1)
+          DIR="$ANDROID_HOME/build-tools/$BT"
+          mkdir -p /tmp/android-sign-tools/lib
+          cp "$DIR/apksigner" /tmp/android-sign-tools/
+          cp "$DIR/zipalign" /tmp/android-sign-tools/
+          cp "$DIR/lib/apksigner.jar" /tmp/android-sign-tools/lib/
+          printf "%s\n" "$BT" > /tmp/android-sign-tools/VERSION.txt
+          chmod +x /tmp/android-sign-tools/apksigner /tmp/android-sign-tools/zipalign
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Android-signing-tools
+          path: /tmp/android-sign-tools
+          if-no-files-found: error
