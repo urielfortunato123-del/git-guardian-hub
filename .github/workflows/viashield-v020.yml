@@ -1,0 +1,54 @@
+name: Build ViaShield v0.2
+
+on:
+  push:
+    branches:
+      - viashield-build-v020
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rebuild source archive
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cat viashield-build/chunk1.b64 viashield-build/chunk2.b64 viashield-build/chunk3.b64 viashield-build/chunk4.b64 viashield-build/chunk5.b64 viashield-build/chunk6.b64 > /tmp/viashield.b64
+          base64 -d /tmp/viashield.b64 > /tmp/viashield.zip
+          mkdir -p /tmp/viashield-src
+          unzip -q /tmp/viashield.zip -d /tmp/viashield-src
+          test -f /tmp/viashield-src/ViaShield_DNS/settings.gradle.kts
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build release APK
+        working-directory: /tmp/viashield-src/ViaShield_DNS
+        run: gradle :app:assembleRelease --stacktrace --no-daemon
+
+      - name: Build debug APK
+        working-directory: /tmp/viashield-src/ViaShield_DNS
+        run: gradle :app:assembleDebug --stacktrace --no-daemon
+
+      - name: Upload APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: ViaShield-DNS-v0.2.0
+          path: |
+            /tmp/viashield-src/ViaShield_DNS/app/build/outputs/apk/release/*.apk
+            /tmp/viashield-src/ViaShield_DNS/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
