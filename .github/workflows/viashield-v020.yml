@@ -45,6 +45,18 @@ jobs:
           }
           '''
           app.write_text(s)
+          doh=Path('/tmp/viashield-src/ViaShield_DNS/app/src/main/java/com/mova/viashield/DohClient.kt')
+          s=doh.read_text()
+          s=s.replace('''.dns(Dns { requestedHost ->
+                    if (requestedHost.equals(host, ignoreCase = true)) bootstrap else Dns.SYSTEM.lookup(requestedHost)
+                })''','''.dns(object : Dns {
+                    override fun lookup(hostname: String): List<InetAddress> =
+                        if (hostname.equals(host, ignoreCase = true)) bootstrap else Dns.SYSTEM.lookup(hostname)
+                })''')
+          doh.write_text(s)
+          agent=Path('/tmp/viashield-src/ViaShield_DNS/app/src/main/java/com/mova/viashield/ViaShieldAiAgent.kt')
+          s=agent.read_text().replace('c.sendMessage(prompt).text.ifBlank { "A IA não retornou texto." }','c.sendMessage(prompt).toString().trim().ifBlank { "A IA não retornou texto." }')
+          agent.write_text(s)
           PY
 
       - name: Set up Java 21
