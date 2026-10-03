@@ -15,58 +15,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Rebuild and patch source archive
+      - name: Rebuild source
         shell: bash
         run: |
           set -euxo pipefail
-          cat viashield-build/chunk1.b64 viashield-build/chunk2.b64 viashield-build/chunk3.b64 viashield-build/chunk4.b64 viashield-build/chunk5.b64 viashield-build/chunk6.b64 > /tmp/viashield.b64
-          base64 -d /tmp/viashield.b64 > /tmp/viashield.zip
-          mkdir -p /tmp/viashield-src
-          unzip -q /tmp/viashield.zip -d /tmp/viashield-src
-          python3 - <<'PY'
-          from pathlib import Path
-          root=Path('/tmp/viashield-src/ViaShield_DNS/build.gradle.kts')
-          s=root.read_text().replace('version "2.2.20"', 'version "2.4.0"')
-          root.write_text(s)
-          app=Path('/tmp/viashield-src/ViaShield_DNS/app/build.gradle.kts')
-          s=app.read_text()
-          s=s.replace('''    kotlinOptions {
-                  jvmTarget = "21"
-              }
-
-          ''','')
-          s=s.replace('kotlin-stdlib:2.2.20','kotlin-stdlib:2.4.0')
-          s += '''
-
-          kotlin {
-              compilerOptions {
-                  jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
-              }
-          }
-          '''
-          app.write_text(s)
-          doh=Path('/tmp/viashield-src/ViaShield_DNS/app/src/main/java/com/mova/viashield/DohClient.kt')
-          s=doh.read_text()
-          s=s.replace('''.dns(Dns { requestedHost ->
-                    if (requestedHost.equals(host, ignoreCase = true)) bootstrap else Dns.SYSTEM.lookup(requestedHost)
-                })''','''.dns(object : Dns {
-                    override fun lookup(hostname: String): List<InetAddress> =
-                        if (hostname.equals(host, ignoreCase = true)) bootstrap else Dns.SYSTEM.lookup(hostname)
-                })''')
-          if '.dns(Dns { requestedHost ->' in s:
-              a=s.index('.dns(Dns { requestedHost ->')
-              b=s.index('                .socketFactory', a)
-              replacement='''.dns(object : Dns {
-                    override fun lookup(hostname: String): List<InetAddress> =
-                        if (hostname.equals(host, ignoreCase = true)) bootstrap else Dns.SYSTEM.lookup(hostname)
-                })
-'''
-              s=s[:a]+replacement+s[b:]
-          doh.write_text(s)
-          agent=Path('/tmp/viashield-src/ViaShield_DNS/app/src/main/java/com/mova/viashield/ViaShieldAiAgent.kt')
-          s=agent.read_text().replace('c.sendMessage(prompt).text.ifBlank { "A IA não retornou texto." }','c.sendMessage(prompt).toString().trim().ifBlank { "A IA não retornou texto." }')
-          agent.write_text(s)
-          PY
+          cat viashield-build/xzchunk1.b64 viashield-build/xzchunk2.b64 viashield-build/xzchunk3.b64 > /tmp/v.b64
+          base64 -d /tmp/v.b64 > /tmp/v.tar.xz
+          mkdir -p /tmp/vsrc
+          tar -xJf /tmp/v.tar.xz -C /tmp/vsrc
+          test -f /tmp/vsrc/ViaShield_DNS/settings.gradle.kts
 
       - name: Set up Java 21
         uses: actions/setup-java@v4
@@ -80,12 +37,12 @@ jobs:
           gradle-version: '8.9'
 
       - name: Build release APK
-        working-directory: /tmp/viashield-src/ViaShield_DNS
+        working-directory: /tmp/vsrc/ViaShield_DNS
         run: gradle :app:assembleRelease --stacktrace --no-daemon
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: ViaShield-DNS-v0.2.0
-          path: /tmp/viashield-src/ViaShield_DNS/app/build/outputs/apk/release/*.apk
+          path: /tmp/vsrc/ViaShield_DNS/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
